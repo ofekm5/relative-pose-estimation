@@ -186,5 +186,3 @@ Yaw: ...
 ```
 
 ---
-
-Just tell me what you'd like next.
