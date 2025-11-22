@@ -1,6 +1,7 @@
 // #include "FeatureExtractor.h"
 // #include "PoseEstimator.h"
 #include "MatchResult.h"
+#include <iostream>
 
 // argv[1] = "before.jpg" ← first image path
 // argv[2] = "after.jpg" ← second image path
