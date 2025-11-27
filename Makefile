@@ -7,11 +7,12 @@ BUILD_DIR := build
 .PHONY: help
 help:
 	@echo "Available targets:"
-	@echo "  make build              - Build project locally using CMake"
-	@echo "  make clean              - Clean build directory"
-	@echo "  make docker-build       - Build Docker image"
-	@echo "  make docker-run         - Run Docker container with example images"
-	@echo "  make run IMG1=... IMG2=... - Run locally built executable"
+	@echo "  make build                  - Build project locally using CMake"
+	@echo "  make clean                  - Clean build directory"
+	@echo "  make docker-build           - Build Docker image"
+	@echo "  make docker-run             - Run Docker container with example images"
+	@echo "  make docker-run-interactive - Open bash shell inside Docker container"
+	@echo "  make run IMG1=... IMG2=...  - Run locally built executable"
 
 .PHONY: build
 build:
@@ -31,6 +32,10 @@ docker-build:
 .PHONY: docker-run
 docker-run:
 	docker run --rm -v "$$(pwd)/images:/data" $(IMAGE_NAME):latest /data/before.jpg /data/after.jpg
+
+.PHONY: docker-run-interactive
+docker-run-interactive:
+	docker run --rm -it -v "$$(pwd)/images:/data" --entrypoint /bin/bash $(IMAGE_NAME):latest
 
 .PHONY: run
 run:
