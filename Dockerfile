@@ -201,10 +201,16 @@ LABEL target.platform="${TARGETPLATFORM}"
 # Only install libraries needed to RUN the program (not build it)
 # libjpeg62-turbo: Read/write JPEG images
 # libpng16-16: Read/write PNG images
+# python3: Python interpreter for interactive mode
+# python3-pip: Python package manager
+# build-essential: GCC/G++ compiler for interactive development
 # ============================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libjpeg62-turbo \
     libpng16-16 \
+    python3 \
+    python3-pip \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy OpenCV libraries from Stage 1
