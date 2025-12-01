@@ -39,8 +39,8 @@ def draw_keypoints(img: np.ndarray, keypoints):
 
 def main():
     # === 1. set your image paths here ===
-    img1_path = "img1.png"   # change to your first image path
-    img2_path = "img2.png"   # change to your second image path
+    img1_path = "../images/img1.png"   # change to your first image path
+    img2_path = "../images/img2.png"   # change to your second image path
 
     if not Path(img1_path).exists() or not Path(img2_path).exists():
         raise SystemExit("Update img1_path / img2_path to valid image files")
@@ -50,8 +50,8 @@ def main():
     img2 = load_gray_image(img2_path)
 
     # === 3. detect keypoints + descriptors ===
-    kp1, des1 = detect_orb_keypoints_and_descriptors(img1, nfeatures=3000)
-    kp2, des2 = detect_orb_keypoints_and_descriptors(img2, nfeatures=3000)
+    kp1, des1 = detect_orb_keypoints_and_descriptors(img1, nfeatures=1500)
+    kp2, des2 = detect_orb_keypoints_and_descriptors(img2, nfeatures=1500)
 
     print(f"Image 1: {len(kp1)} keypoints, descriptors shape: {des1.shape}")
     print(f"Image 2: {len(kp2)} keypoints, descriptors shape: {des2.shape}")
