@@ -4,6 +4,8 @@ from pathlib import Path
 import math
 
 
+
+
 # ---------- Utils ----------
 
 def load_gray_image(path: str) -> np.ndarray:
@@ -71,11 +73,24 @@ def rad2deg(x):
 
 def main():
     # ---- 1. Set your image paths here ----
-    img1_path = "../images/img1.png"   # first view
-    img2_path = "../images/img2.png"   # second view
+    # ---- 1. Set your image paths here ----
+    img1_path = "../silmulator_data/images/000000.png"   # first view
+    img2_path = "../silmulator_data/images/000001.png"   # second view
 
     if not Path(img1_path).exists() or not Path(img2_path).exists():
         raise SystemExit("Update img1_path/img2_path to valid image files")
+
+    # base directory of simulator data (where camera_poses.csv lives)
+    base_dir = Path("../silmulator_data")
+    poses_csv = base_dir / "camera_poses.csv"
+
+    # infer frame indices from filenames (e.g. 000000.png -> 0)
+    frame1 = int(Path(img1_path).stem)
+    frame2 = int(Path(img2_path).stem)
+
+    print(f"Using frames: {frame1} -> {frame2}")
+    print(f"Image 1 path: {img1_path}")
+    print(f"Image 2 path: {img2_path}")
 
     # ---- 2. Load images ----
     img1 = load_gray_image(img1_path)
@@ -108,9 +123,18 @@ def main():
     # ---- 6. Camera intrinsics (approximate if unknown) ----
     h, w = img1.shape[:2]
 
-    fx = fy = 900.0   # you can change if you know real intrinsics
-    cx = w / 2.0
-    cy = h / 2.0
+    # original calibration resolution
+    orig_w = 960
+    orig_h = 720
+
+    # scale calibration if images are resized by simulator
+    scale_x = w / orig_w
+    scale_y = h / orig_h
+
+    fx = 924.82939686 * scale_x
+    fy = 920.4766382 * scale_y
+    cx = 468.24930789 * scale_x
+    cy = 353.65863024 * scale_y
 
     K = np.array([
         [fx, 0.0, cx],
@@ -118,7 +142,7 @@ def main():
         [0.0, 0.0, 1.0]
     ], dtype=np.float64)
 
-    print("\nIntrinsic matrix K =\n", K)
+    print("\nUsing REAL calibration matrix K =\n", K)
 
     # ---- 7. Estimate Essential matrix ----
     E, mask_E = cv2.findEssentialMat(
