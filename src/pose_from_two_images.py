@@ -1,298 +1,208 @@
-import cv2
-import numpy as np
+# pose_from_two_images.py
 from pathlib import Path
-import math
+import numpy as np
+import cv2
+
+from image_loader import load_image_pair
+from feature_extractor import create_feature_extractor, detect_and_compute
+from matcher import create_matcher, match_descriptors
+
+# כאן נניח שהפונקציות האלו קיימות אצלך כבר באיזה קובץ אחר
+from gt_utils import load_gt_poses, evaluate_pair
 
 
 
-
-# ---------- Utils ----------
-
-def load_gray_image(path: str) -> np.ndarray:
-    """Load image from disk and convert to grayscale."""
-    img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
-    if img is None:
-        raise FileNotFoundError(f"Could not load image: {path}")
-    return img
-
-
-def detect_orb(img: np.ndarray, nfeatures: int = 3000):
-    """Detect ORB keypoints and descriptors."""
-    orb = cv2.ORB_create(nfeatures=nfeatures)
-    keypoints, descriptors = orb.detectAndCompute(img, None)
-    return keypoints, descriptors
-
-
-def match_descriptors(des1, des2, ratio_thresh: float = 0.75):
+def rotmat_to_ypr_y_up(R):
     """
-    Match two sets of ORB descriptors using BFMatcher + Lowe ratio test.
-    Returns list of good matches.
+    Decompose rotation matrix R to:
+        yaw   around +Y
+        pitch around +X
+        roll  around +Z
+
+    Assuming convention:
+        R = Ry(yaw) * Rx(pitch) * Rz(roll)
+
+    Returns: (roll, pitch, yaw) in radians
     """
-    bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
-    knn_matches = bf.knnMatch(des1, des2, k=2)
 
-    good_matches = []
-    for m, n in knn_matches:
-        if m.distance < ratio_thresh * n.distance:
-            good_matches.append(m)
+    # מתוך הפיתוח הסימבולי:
+    # R[1,2] = -sin(pitch)
+    pitch = -np.arcsin(R[1, 2])
 
-    return good_matches
-
-
-def rotation_matrix_to_euler_angles(R: np.ndarray):
-    """
-    Convert rotation matrix to Euler angles (yaw, pitch, roll) in radians.
-    Convention: R = Rz(yaw) * Ry(pitch) * Rx(roll).
-    yaw   = rotation around Z (azimuth)
-    pitch = rotation around Y
-    roll  = rotation around X
-    """
-    assert R.shape == (3, 3)
-
-    sy = math.sqrt(R[0, 0] * R[0, 0] + R[1, 0] * R[1, 0])
-    singular = sy < 1e-6
-
-    if not singular:
-        yaw = math.atan2(R[1, 0], R[0, 0])          # around Z
-        pitch = math.atan2(-R[2, 0], sy)            # around Y
-        roll = math.atan2(R[2, 1], R[2, 2])         # around X
-    else:
-        # Gimbal lock case
-        yaw = math.atan2(-R[1, 2], R[1, 1])
-        pitch = math.atan2(-R[2, 0], sy)
+    # נזהרים מסינגולריות כשcos(pitch) ~ 0
+    if np.isclose(np.cos(pitch), 0.0, atol=1e-6):
+        # במקרה קצה – אפשר לקבע roll=0 ולחלץ yaw בערך מהאלמנטים היותר יציבים
         roll = 0.0
+        yaw = np.arctan2(-R[0, 1], R[0, 0])
+    else:
+        # R[0,2] = sin(yaw)*cos(pitch)
+        # R[2,2] = cos(yaw)*cos(pitch)
+        yaw = np.arctan2(R[0, 2], R[2, 2])
 
-    return yaw, pitch, roll
+        # R[1,0] = sin(roll)*cos(pitch)
+        # R[1,1] = cos(roll)*cos(pitch)
+        roll = np.arctan2(R[1, 0], R[1, 1])
+
+    return roll, pitch, yaw
 
 
 def rad2deg(x):
-    return x * 180.0 / math.pi
+    return x * 180.0 / np.pi
 
 
-# ---------- Main pipeline ----------
+def rad2deg(x):
+    return x * 180.0 / np.pi
+def extract_matched_points(kp1, kp2, matches):
+    """
+    Turn cv2.DMatch + keypoints into Nx2 arrays of points.
+    """
+    pts1 = []
+    pts2 = []
+    for m in matches:
+        pts1.append(kp1[m.queryIdx].pt)
+        pts2.append(kp2[m.trainIdx].pt)
 
-def main():
-    # ---- 1. Set your image paths here ----
-    # ---- 1. Set your image paths here ----
-    img1_path = "../silmulator_data/images/000000.png"   # first view
-    img2_path = "../silmulator_data/images/000001.png"   # second view
+    pts1 = np.array(pts1, dtype=np.float32)
+    pts2 = np.array(pts2, dtype=np.float32)
+    return pts1, pts2
 
-    if not Path(img1_path).exists() or not Path(img2_path).exists():
-        raise SystemExit("Update img1_path/img2_path to valid image files")
 
-    # base directory of simulator data (where camera_poses.csv lives)
-    base_dir = Path("../silmulator_data")
-    poses_csv = base_dir / "camera_poses.csv"
+def compute_pose_from_images(
+    img1,
+    img2,
+    K: np.ndarray,
+    feature_method: str = "ORB",
+    norm_type: str = "Hamming",
+):
+    """
+    לוקח שתי תמונות + מטריצת כיול K ומחשב R,t ביניהן.
+    """
+    # 1) מאפיינים ותיאורים
+    extractor = create_feature_extractor(feature_method)
+    kp1, desc1 = detect_and_compute(img1, extractor)
+    kp2, desc2 = detect_and_compute(img2, extractor)
 
-    # infer frame indices from filenames (e.g. 000000.png -> 0)
-    frame1 = int(Path(img1_path).stem)
-    frame2 = int(Path(img2_path).stem)
+    if desc1 is None or desc2 is None:
+        raise RuntimeError("Could not compute descriptors for one of the images.")
 
-    print(f"Using frames: {frame1} -> {frame2}")
-    print(f"Image 1 path: {img1_path}")
-    print(f"Image 2 path: {img2_path}")
+    # 2) התאמנות
+    matcher = create_matcher(norm_type=norm_type)
+    matches = match_descriptors(
+        desc1, desc2, matcher, sort_by_distance=True, max_matches=500
+    )
 
-    # ---- 2. Load images ----
-    img1 = load_gray_image(img1_path)
-    img2 = load_gray_image(img2_path)
+    # 3) הפיכת ההתאמות לנקודות
+    pts1, pts2 = extract_matched_points(kp1, kp2, matches)
 
-    print(f"Image 1 shape: {img1.shape}")
-    print(f"Image 2 shape: {img2.shape}")
+    # 4) מטריצה אסנציאלית
+    E, mask = cv2.findEssentialMat(
+        pts1, pts2, K, method=cv2.RANSAC, prob=0.999, threshold=1.0
+    )
 
-    # ---- 3. Detect ORB features ----
-    kp1, des1 = detect_orb(img1, nfeatures=3000)
-    kp2, des2 = detect_orb(img2, nfeatures=3000)
+    if E is None:
+        raise RuntimeError("Could not estimate Essential matrix.")
 
-    print(f"Image 1: {len(kp1)} keypoints")
-    print(f"Image 2: {len(kp2)} keypoints")
+    # 5) שחזור R,t
+    _, R, t, mask_pose = cv2.recoverPose(E, pts1, pts2, K)
 
-    if des1 is None or des2 is None or len(kp1) < 10 or len(kp2) < 10:
-        raise SystemExit("Not enough keypoints/descriptors found in images")
+    return R, t, pts1, pts2, matches, mask_pose
 
-    # ---- 4. Match descriptors ----
-    good_matches = match_descriptors(des1, des2, ratio_thresh=0.75)
-    print(f"Good matches: {len(good_matches)}")
 
-    if len(good_matches) < 8:
-        raise SystemExit("Not enough good matches to estimate pose")
+if __name__ == "__main__":
+    # ----------- שלב 1: טעינת שתי התמונות -----------
+    base_dir = Path("../silmulator_data/simple_movement")
 
-    # ---- 5. Build matched point arrays ----
-    pts1 = np.float32([kp1[m.queryIdx].pt for m in good_matches])
-    pts2 = np.float32([kp2[m.trainIdx].pt for m in good_matches])
+    # פה תעדכן את שמות הקבצים לפי מה שיש לך בפועל
+    img1_path = base_dir / "images" / "000330.png"
+    img2_path = base_dir / "images" / "000345.png"
 
-    # ---- 6. Camera intrinsics (approximate if unknown) ----
+    img1, img2 = load_image_pair(str(img1_path), str(img2_path), to_gray=True)
+
+    # ----------- שלב 2: קליברציה לפי מה ששלחת -----------
     h, w = img1.shape[:2]
-
-    # original calibration resolution
-    orig_w = 960
-    orig_h = 720
-
-    # scale calibration if images are resized by simulator
-    scale_x = w / orig_w
-    scale_y = h / orig_h
-
+    scale_x = w / 960.0
+    scale_y = h / 720.0
     fx = 924.82939686 * scale_x
     fy = 920.4766382 * scale_y
     cx = 468.24930789 * scale_x
     cy = 353.65863024 * scale_y
 
     K = np.array([
-        [fx, 0.0, cx],
-        [0.0, fy, cy],
-        [0.0, 0.0, 1.0]
-    ], dtype=np.float64)
+        [fx, 0,  cx],
+        [0,  fy, cy],
+        [0,  0,  1]
+    ])
 
-    print("\nUsing REAL calibration matrix K =\n", K)
+    print("K =\n", K)
 
-    # ---- 7. Estimate Essential matrix ----
-    E, mask_E = cv2.findEssentialMat(
-        pts1,
-        pts2,
+    # ----------- שלב 3: חישוב ה-Pose מהתמונות -----------
+    R, t, pts1, pts2, matches, mask_pose = compute_pose_from_images(
+        img1,
+        img2,
         K,
-        method=cv2.RANSAC,
-        prob=0.999,
-        threshold=1.0
+        feature_method="ORB",
+        norm_type="Hamming",
     )
 
-    if E is None:
-        raise SystemExit("Could not estimate Essential matrix")
+    print("R =\n", R)
+    print("t =\n", t)
+    print("Number of inlier matches:", int(mask_pose.sum()))
 
-    print("\nEssential matrix E =\n", E)
+    # ---- 4: GT מהקובץ ----
+    poses_path = base_dir / "camera_poses.txt"
+    df_gt = load_gt_poses(poses_path)
 
-    # ---- 8. Recover pose (R, t) ----
-    # R, t describe the transform from camera1 to camera2
-    _, R, t, mask_pose = cv2.recoverPose(E, pts1, pts2, K)
+    frame1 = 0
+    frame2 = 15
 
-    print("\nRotation matrix R (cam2 relative to cam1) =\n", R)
-    print("\nTranslation vector t (direction, up to scale) =\n", t)
+    # שורה של GT לכל פריים
+    row1 = df_gt[df_gt["frame"] == frame1].iloc[0]
+    row2 = df_gt[df_gt["frame"] == frame2].iloc[0]
 
-    # ---- 9. Compute camera 2 position in world (camera 1 frame) ----
-    # World frame = camera 1 frame:
-    # Camera 1: C1 = (0, 0, 0)
-    # Camera 2 center: C2 = -R^T * t
-    C2 = -R.T @ t  # 3x1 vector
-    x, y, z = C2.flatten().tolist()
+    # זוויות GT גולמיות (נניח כבר בדגריז בקובץ)
+    gt_roll1_deg = row1.roll
+    gt_pitch1_deg = row1.pitch
+    gt_yaw1_deg = row1.yaw
 
-    print("\nCamera positions in world frame (up to scale):")
-    print(f" Camera 1: (0.0, 0.0, 0.0)")
-    print(f" Camera 2: (X={x:.6f}, Y={y:.6f}, Z={z:.6f})")
+    gt_roll2_deg = row2.roll
+    gt_pitch2_deg = row2.pitch
+    gt_yaw2_deg = row2.yaw
 
-    # ---- 10. Convert R to Euler angles (azimuth, pitch, roll) ----
-    yaw, pitch, roll = rotation_matrix_to_euler_angles(R)
+    # דלתא זוויות GT (מה שכבר היה לך בעצם)
+    gt_droll_deg = gt_roll2_deg - gt_roll1_deg
+    gt_dpitch_deg = gt_pitch2_deg - gt_pitch1_deg
+    gt_dyaw_deg = gt_yaw2_deg - gt_yaw1_deg
 
-    azimuth_deg = rad2deg(yaw)
-    pitch_deg = rad2deg(pitch)
-    roll_deg = rad2deg(roll)
+    # ---- 5: זוויות מוערכות מה-R של recoverPose ----
+    roll_est, pitch_est, yaw_est = rotmat_to_ypr_y_up(R)
 
-    print("\nOrientation of camera 2 relative to camera 1:")
-    print(" (radians)")
-    print(f"  azimuth (yaw) = {yaw:.6f}")
-    print(f"  pitch         = {pitch:.6f}")
-    print(f"  roll          = {roll:.6f}")
+    est_roll_deg = rad2deg(roll_est)
+    est_pitch_deg = rad2deg(pitch_est)
+    est_yaw_deg = rad2deg(yaw_est)
 
-    print("\n (degrees)")
-    print(f"  azimuth (yaw) = {azimuth_deg:.3f} deg")
-    print(f"  pitch         = {pitch_deg:.3f} deg")
-    print(f"  roll          = {roll_deg:.3f} deg")
+    # ---- 6: הדפסה מסודרת להשוואה ----
+    print(f"GT raw angles frame{frame1}: roll={gt_roll1_deg:.3f}, pitch={gt_pitch1_deg:.3f}, yaw={gt_yaw1_deg:.3f}")
+    print(f"GT raw angles frame{frame2}: roll={gt_roll2_deg:.3f}, pitch={gt_pitch2_deg:.3f}, yaw={gt_yaw2_deg:.3f}")
+    print(f"GT raw diff (deg):  Δroll={gt_droll_deg:.3f}, Δpitch={gt_dpitch_deg:.3f}, Δyaw={gt_dyaw_deg:.3f}")
 
-    # =============================================================
-    # 11. Approximate covariance using bootstrap over inlier matches
-    # =============================================================
+    print(f"Estimated relative angles (deg): roll={est_roll_deg:.3f}, pitch={est_pitch_deg:.3f}, yaw={est_yaw_deg:.3f}")
 
-    inlier_mask = mask_pose.ravel().astype(bool)
-    pts1_in = pts1[inlier_mask]
-    pts2_in = pts2[inlier_mask]
+    # אפשר גם שגיאה (אומדן - GT)
+    err_roll = est_roll_deg - gt_droll_deg
+    err_pitch = est_pitch_deg - gt_dpitch_deg
+    err_yaw = est_yaw_deg - gt_dyaw_deg
 
-    n_inliers = pts1_in.shape[0]
-    print(f"\nInliers after recoverPose: {n_inliers}")
+    print(f"Angle errors (est - GT) (deg): dRoll={err_roll:.3f}, dPitch={err_pitch:.3f}, dYaw={err_yaw:.3f}")
 
-    if n_inliers < 15:
-        print("Not enough inliers for reasonable covariance estimation.")
-        samples = None
-    else:
-        N_BOOT = 100  # you can increase this for smoother covariance
-        rng = np.random.default_rng(seed=42)
+    gt_x1, gt_y1, gt_z1 = row1.x, row1.y, row1.z
+    gt_x2, gt_y2, gt_z2 = row2.x, row2.y, row2.z
+    est_dx, est_dy, est_dz = t[0,0], t[1,0], t[2,0]
 
-        samples_list = []
-
-        for b in range(N_BOOT):
-            # Sample inliers with replacement
-            idx = rng.integers(0, n_inliers, size=n_inliers)
-            p1b = pts1_in[idx]
-            p2b = pts2_in[idx]
-
-            Eb, _ = cv2.findEssentialMat(
-                p1b,
-                p2b,
-                K,
-                method=cv2.RANSAC,
-                prob=0.999,
-                threshold=1.0
-            )
-            if Eb is None:
-                continue
-
-            try:
-                _, Rb, tb, _ = cv2.recoverPose(Eb, p1b, p2b, K)
-            except cv2.error:
-                continue
-
-            C2b = -Rb.T @ tb
-            xb, yb, zb = C2b.flatten().tolist()
-            yawb, pitchb, rollb = rotation_matrix_to_euler_angles(Rb)
-
-            samples_list.append([xb, yb, zb, yawb, pitchb, rollb])
-
-        if len(samples_list) < 10:
-            print("Bootstrap produced too few valid samples, covariance will be unreliable.")
-            samples = None
-        else:
-            samples = np.array(samples_list)  # shape: (N, 6)
-
-    if samples is not None:
-        mean_params = samples.mean(axis=0)
-        cov_params = np.cov(samples, rowvar=False)
-
-        print("\n=== Bootstrap pose statistics (up to scale) ===")
-        print("Parameters order: [X, Y, Z, yaw, pitch, roll]")
-
-        print("\nMean parameters:")
-        print(f" X    = {mean_params[0]:.6f}")
-        print(f" Y    = {mean_params[1]:.6f}")
-        print(f" Z    = {mean_params[2]:.6f}")
-        print(f" yaw  = {mean_params[3]:.6f} rad ({rad2deg(mean_params[3]):.3f} deg)")
-        print(f" pitch= {mean_params[4]:.6f} rad ({rad2deg(mean_params[4]):.3f} deg)")
-        print(f" roll = {mean_params[5]:.6f} rad ({rad2deg(mean_params[5]):.3f} deg)")
-
-        print("\nCovariance matrix (6x6):")
-        print(cov_params)
-
-        std_params = np.sqrt(np.diag(cov_params))
-        print("\nStandard deviations:")
-        print(f" sigma_X    = {std_params[0]:.6f}")
-        print(f" sigma_Y    = {std_params[1]:.6f}")
-        print(f" sigma_Z    = {std_params[2]:.6f}")
-        print(f" sigma_yaw  = {std_params[3]:.6f} rad ({rad2deg(std_params[3]):.3f} deg)")
-        print(f" sigma_pitch= {std_params[4]:.6f} rad ({rad2deg(std_params[4]):.3f} deg)")
-        print(f" sigma_roll = {std_params[5]:.6f} rad ({rad2deg(std_params[5]):.3f} deg)")
-    else:
-        print("\nCovariance could not be reliably estimated (too few valid bootstrap samples).")
-
-    # ---- 12. (Optional) show matches ----
-    show_matches = True
-    if show_matches:
-        matched_vis = cv2.drawMatches(
-            img1, kp1,
-            img2, kp2,
-            good_matches[:50],   # show up to 50 matches
-            None,
-            flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS
-        )
-        cv2.imshow("Good matches", matched_vis)
-        print("\nPress any key in the image window to close...")
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-
-
-if __name__ == "__main__":
-    main()
+    gt_dx = gt_x2 - gt_x1
+    gt_dy = gt_y2 - gt_y1
+    gt_dz = gt_z2 - gt_z1
+    print(f"GT Δpos (X,Y,Z): dX={gt_dx:.6f}, dY={gt_dy:.6f}, dZ={gt_dz:.6f}")
+    err_dx = est_dx - gt_dx
+    err_dy = est_dy - gt_dy
+    err_dz = est_dz - gt_dz
+    print(f"Position errors (est - GT): dX={err_dx:.6f}, dY={err_dy:.6f}, dZ={err_dz:.6f}")
