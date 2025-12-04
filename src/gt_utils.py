@@ -43,10 +43,11 @@ def evaluate_pair(base_dir, df_gt, frame1: int, frame2: int):
     """
     מחשב שגיאות זווית ומיקום עבור זוג פריימים:
     מחזיר:
-        pos_err  - נורמת השגיאה במיקום [m] במערכת הצירים של המצלמה הראשונה
-        d_roll   - שגיאת זווית roll (deg)
-        d_pitch  - שגיאת זווית pitch (deg)
-        d_yaw    - שגיאת זווית yaw (deg)
+        pos_err    - נורמת השגיאה במיקום [m] במערכת הצירים של המצלמה הראשונה
+        d_roll     - שגיאת זווית roll (deg)
+        d_pitch    - שגיאת זווית pitch (deg)
+        d_yaw      - שגיאת זווית yaw (deg)
+        t_est_cam1 - וקטור התזוזה המוערך במערכת הצירים של המצלמה הראשונה (numpy בגודל 3)
     """
     import numpy as np
     from image_loader import load_image_pair
@@ -136,9 +137,10 @@ def evaluate_pair(base_dir, df_gt, frame1: int, frame2: int):
     t_norm = np.linalg.norm(t_vec)
 
     if t_norm < 1e-9 or gt_norm_cam1 < 1e-9:
-        # אין מידע טוב → נחזיר NaN
+        # אין מידע טוב → נחזיר NaN וגם None בתור t_est_cam1
         pos_err = float("nan")
-        return pos_err, float(d_roll), float(d_pitch), float(d_yaw)
+        t_est_cam1 = None
+        return pos_err, float(d_roll), float(d_pitch), float(d_yaw), t_est_cam1
 
     t_unit       = t_vec / t_norm
     gt_unit_cam1 = gt_vec_cam1 / gt_norm_cam1
@@ -147,10 +149,12 @@ def evaluate_pair(base_dir, df_gt, frame1: int, frame2: int):
     dot  = np.dot(t_unit, gt_unit_cam1)
     sign = np.sign(dot) if dot != 0 else 1.0
 
+    # תרגום משוער במערכת cam1, עם אותו גודל כמו GT
     t_scaled_cam1 = t_unit * gt_norm_cam1 * sign
 
     # --- 9. שגיאת מיקום אמיתית (cam1 frame) ---
     err_vec = t_scaled_cam1 - gt_vec_cam1
     pos_err = float(np.linalg.norm(err_vec))
 
-    return pos_err, float(d_roll), float(d_pitch), float(d_yaw)
+    # נחזיר גם את וקטור התזוזה המוערך במערכת cam1
+    return pos_err, float(d_roll), float(d_pitch), float(d_yaw), t_scaled_cam1
