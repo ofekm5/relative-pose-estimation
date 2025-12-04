@@ -10,6 +10,43 @@ from matcher import create_matcher, match_descriptors
 # כאן נניח שהפונקציות האלו קיימות אצלך כבר באיזה קובץ אחר
 from gt_utils import load_gt_poses, evaluate_pair
 
+def ypr_to_rotmat_y_up(roll, pitch, yaw):
+    """
+    Build rotation matrix R from:
+        yaw   around +Y
+        pitch around +X
+        roll  around +Z
+
+    Same convention used in rotmat_to_ypr_y_up:
+        R = Ry(yaw) * Rx(pitch) * Rz(roll)
+    """
+
+    # yaw around +Y
+    cy, sy = np.cos(yaw), np.sin(yaw)
+    Ry = np.array([
+        [ cy, 0.0, sy],
+        [0.0, 1.0, 0.0],
+        [-sy, 0.0, cy]
+    ])
+
+    # pitch around +X
+    cx, sx = np.cos(pitch), np.sin(pitch)
+    Rx = np.array([
+        [1.0, 0.0, 0.0],
+        [0.0,  cx, -sx],
+        [0.0,  sx,  cx]
+    ])
+
+    # roll around +Z
+    cz, sz = np.cos(roll), np.sin(roll)
+    Rz = np.array([
+        [ cz, -sz, 0.0],
+        [ sz,  cz, 0.0],
+        [0.0, 0.0, 1.0]
+    ])
+
+    # final rotation matrix
+    return Ry @ Rx @ Rz
 
 
 def rotmat_to_ypr_y_up(R):
@@ -112,9 +149,11 @@ if __name__ == "__main__":
     # ----------- שלב 1: טעינת שתי התמונות -----------
     base_dir = Path("../silmulator_data/simple_movement")
 
+    frame1 = 0
+    frame2 = 15
     # פה תעדכן את שמות הקבצים לפי מה שיש לך בפועל
-    img1_path = base_dir / "images" / "000330.png"
-    img2_path = base_dir / "images" / "000345.png"
+    img1_path = base_dir / "images" / f"{str(frame1).zfill(6)}.png"
+    img2_path = base_dir / "images" / f"{str(frame2).zfill(6)}.png"
 
     img1, img2 = load_image_pair(str(img1_path), str(img2_path), to_gray=True)
 
@@ -152,8 +191,7 @@ if __name__ == "__main__":
     poses_path = base_dir / "camera_poses.txt"
     df_gt = load_gt_poses(poses_path)
 
-    frame1 = 0
-    frame2 = 15
+
 
     # שורה של GT לכל פריים
     row1 = df_gt[df_gt["frame"] == frame1].iloc[0]
@@ -196,13 +234,57 @@ if __name__ == "__main__":
 
     gt_x1, gt_y1, gt_z1 = row1.x, row1.y, row1.z
     gt_x2, gt_y2, gt_z2 = row2.x, row2.y, row2.z
-    est_dx, est_dy, est_dz = t[0,0], t[1,0], t[2,0]
 
+    # --- Δpos ב-world frame כמו קודם ---
     gt_dx = gt_x2 - gt_x1
     gt_dy = gt_y2 - gt_y1
     gt_dz = gt_z2 - gt_z1
-    print(f"GT Δpos (X,Y,Z): dX={gt_dx:.6f}, dY={gt_dy:.6f}, dZ={gt_dz:.6f}")
-    err_dx = est_dx - gt_dx
-    err_dy = est_dy - gt_dy
-    err_dz = est_dz - gt_dz
-    print(f"Position errors (est - GT): dX={err_dx:.6f}, dY={err_dy:.6f}, dZ={err_dz:.6f}")
+    gt_vec_world = np.array([gt_dx, gt_dy, gt_dz], dtype=float)
+    gt_norm_world = np.linalg.norm(gt_vec_world)
+
+    print(f"GT Δpos (world, X,Y,Z): dX={gt_dx:.6f}, dY={gt_dy:.6f}, dZ={gt_dz:.6f}")
+
+    # --- בונים את R_wc1 (סיבוב מצלמה 1 ביחס לעולם) מ-GT roll/pitch/yaw ---
+    roll1_rad = np.deg2rad(gt_roll1_deg)
+    pitch1_rad = np.deg2rad(gt_pitch1_deg)
+    yaw1_rad = np.deg2rad(gt_yaw1_deg)
+
+    R_wc1 = ypr_to_rotmat_y_up(roll1_rad, pitch1_rad, yaw1_rad)  # world <- cam1
+    R_c1w = R_wc1.T  # cam1 <- world
+
+    # --- Δpos במערכת הצירים של המצלמה הראשונה ---
+    gt_vec_cam1 = R_c1w @ gt_vec_world
+    gt_norm_cam1 = np.linalg.norm(gt_vec_cam1)
+
+    print(f"GT Δpos (cam1 frame): dX={gt_vec_cam1[0]:.6f}, dY={gt_vec_cam1[1]:.6f}, dZ={gt_vec_cam1[2]:.6f}")
+
+    # --- t מה-recoverPose: וקטור תנועה במערכת הצירים של המצלמה הראשונה ---
+    t_vec = t.reshape(3).astype(float)
+    t_unit = t_vec / np.linalg.norm(t_vec)
+
+    # נסדר סימן כך שיתיישר עם ה-GT במערכת הצירים של המצלמה
+    if gt_norm_cam1 > 0:
+        gt_unit_cam1 = gt_vec_cam1 / gt_norm_cam1
+        dot = np.dot(t_unit, gt_unit_cam1)
+        sign = np.sign(dot) if dot != 0 else 1.0
+    else:
+        sign = 1.0
+
+    # עושים scale של t לפי האורך של GT במערכת הצירים של המצלמה
+    t_scaled_cam1 = t_unit * gt_norm_cam1 * sign
+
+    est_dx, est_dy, est_dz = t_scaled_cam1
+
+    print(f"Estimated Δpos (cam1, scaled): dX={est_dx:.6f}, dY={est_dy:.6f}, dZ={est_dz:.6f}")
+
+    err_dx = est_dx - gt_vec_cam1[0]
+    err_dy = est_dy - gt_vec_cam1[1]
+    err_dz = est_dz - gt_vec_cam1[2]
+
+    print(f"Position errors in cam1 frame (est - GT): dX={err_dx:.6f}, dY={err_dy:.6f}, dZ={err_dz:.6f}")
+
+    # שגיאה כוללת (נורמת L2 של וקטור השגיאה)
+    err_vec = np.array([err_dx, err_dy, err_dz], dtype=float)
+    err_norm = np.linalg.norm(err_vec)
+    print(f"Total position error (cam1 frame, L2 norm): {err_norm:.6f} [m]")
+
