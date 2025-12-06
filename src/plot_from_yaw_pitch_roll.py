@@ -2,6 +2,17 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
+
+
+def build_path_from_rpy(roll, pitch, yaw, step_len=0.05):
+    positions = [np.array([0.0, 0.0, 0.0])]
+    for r, p, yw in zip(roll, pitch, yaw):
+        d = rpy_to_direction(r, p, yw)
+        new_pos = positions[-1] + step_len * d
+        positions.append(new_pos)
+    return np.array(positions)
+
+
 # --------------------------------------------------------
 # 1. פונקציה: RPY -> וקטור כיוון (אורך 1)
 # --------------------------------------------------------

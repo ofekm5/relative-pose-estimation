@@ -158,3 +158,26 @@ def evaluate_pair(base_dir, df_gt, frame1: int, frame2: int):
 
     # נחזיר גם את וקטור התזוזה המוערך במערכת cam1
     return pos_err, float(d_roll), float(d_pitch), float(d_yaw), t_scaled_cam1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
