@@ -2,8 +2,8 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from pathlib import Path
-from image_loader import load_image_pair
-from pose_matcher import PoseMatcher
+from .image_loader import load_image_pair
+from .pose_matcher import PoseMatcher
 import cv2
 
 class PosePlotter:

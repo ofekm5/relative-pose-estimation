@@ -32,5 +32,4 @@ Thumbs.db
 
 # Test data (add specific paths if needed)
 images/
-test/
-tests/
+# tests/  # Now needed for test scripts

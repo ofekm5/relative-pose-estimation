@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Before major changes
+1. Use a planner, provide step-by-step descriptions
+2. Make small changes each step
+3. Ask questions if data missing or if there are unclear instructions
+
 ## Project Overview
 
 This is a **6-DoF (6 Degrees of Freedom) Relative Pose Estimation** system that uses classical computer vision techniques to estimate camera motion between two consecutive images. It uses **ORB features, feature matching, Essential Matrix estimation, and RecoverPose** to compute translation (Tx, Ty, Tz) and rotation (Roll, Pitch, Yaw) - no training or datasets required.

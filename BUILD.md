@@ -1,6 +1,6 @@
 # Build Guide
 
-This document explains how to build and run the 6-DoF Relative Pose Estimation system.
+This document explains how to set up and run the 6-DoF Relative Pose Estimation system (Python implementation).
 
 ## Quick Start
 
@@ -8,41 +8,46 @@ This document explains how to build and run the 6-DoF Relative Pose Estimation s
 # Show all available commands
 make help
 
-# Local build (requires OpenCV installed)
-make build
+# Install Python dependencies locally
+make install
 
-# Run locally
-make run IMG1=images/before.jpg IMG2=images/after.jpg
+# Run evaluation with visualization
+make run-eval
+
+# Generate 3D plots
+make run-plot
+
+# Generate video with ground truth overlay
+make run-video
 
 # Docker build
 make docker-build
 
-# Docker run
+# Docker run (interactive)
 make docker-run
 ```
 
 ## Build System Overview
 
-The project uses **CMake** for building C++ code and a simple **Makefile wrapper** for convenience.
+The project uses **Python 3** with **pip** for dependency management and a **Makefile wrapper** for convenience.
 
-### Three-Layer Build System
+### Two-Layer Build System
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ 1. Makefile (Convenience Layer)                            │
-│    - Shortcuts: make build, make docker-build, make run    │
-│    - Just calls CMake or Docker commands                   │
+│    - Shortcuts: make install, make run-eval, make docker   │
+│    - Calls pip or Python commands                          │
 └────────────────┬────────────────────────────────────────────┘
                  │
         ┌────────┴─────────┐
         │                  │
         ▼                  ▼
 ┌──────────────┐    ┌─────────────────────────────────────┐
-│ 2a. CMake    │    │ 2b. Dockerfile (3 stages)          │
-│ (Local)      │    │     - Uses CMake internally         │
-│              │    │     - Stage 1: Build OpenCV         │
-│              │    │     - Stage 2: Build project (CMake)│
-│              │    │     - Stage 3: Runtime image        │
+│ 2a. pip      │    │ 2b. Dockerfile (single stage)      │
+│ (Local)      │    │     - Python 3.9 base image         │
+│              │    │     - pip install requirements      │
+│              │    │     - Copy Python source            │
 └──────────────┘    └─────────────────────────────────────┘
 ```
 
@@ -50,198 +55,125 @@ The project uses **CMake** for building C++ code and a simple **Makefile wrapper
 
 ```
 relative-pose-estimation/
-├── CMakeLists.txt          # CMake configuration (used locally AND in Docker)
+├── requirements.txt        # Python dependencies
 ├── Makefile                # Convenience wrapper
-├── Dockerfile              # Multi-stage container build
-├── include/                # Header files (.h, .hpp)
-├── src/                    # Source files (.c, .cpp)
-│   ├── main.cpp           # Entry point (C++ file)
-│   ├── MatchResult.h      # Shared data structures
-│   └── ...                # FeatureExtractor, PoseEstimator modules
-└── images/                 # Test images (mounted to /data in Docker)
+├── Dockerfile              # Docker container build
+├── src/                    # Python source files (.py)
+│   ├── pose_matcher.py    # Main pose estimation pipeline
+│   ├── plots_graths.py    # Visualization and video generation
+│   ├── feature_extractor.py
+│   ├── matcher.py
+│   ├── image_loader.py
+│   ├── gt_utils.py
+│   └── ...                # Additional utilities
+└── silmulator_data/        # Ground truth data and test images
+    └── simple_movement/
+        ├── camera_poses.txt
+        └── images/
 ```
 
 ---
 
-## 📘 Understanding CMakeLists.txt
+## 📘 Understanding requirements.txt
 
-### What is CMake?
+### What is requirements.txt?
 
-CMake is a **cross-platform build system generator**. It doesn't compile code directly—instead, it generates build files (Makefiles, Visual Studio projects, etc.) that compile your code.
+`requirements.txt` is a **standard Python convention** for specifying project dependencies. It lists all Python packages needed to run the project, along with their version constraints.
 
-### How CMakeLists.txt Works
+### How requirements.txt Works
 
-```cmake
-# 1. Project Setup
-cmake_minimum_required(VERSION 3.10)
-project(RelativePoseEstimation)
+```txt
+# Computer Vision
+opencv-python>=4.8.0        # OpenCV with pre-built binaries
 
-# 2. Compiler Settings
-set(CMAKE_CXX_STANDARD 11)              # Use C++11 features
-set(CMAKE_CXX_STANDARD_REQUIRED ON)     # Enforce C++11 (don't fall back)
+# Numerical Computing
+numpy>=1.24.0               # Array operations and linear algebra
 
-# 3. Platform Detection (NEW - auto-detects x86_64 vs ARM64)
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)")
-    # Raspberry Pi 4 detected
-    message(STATUS "ARM64 platform detected")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mfpu=neon")
-elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64)")
-    # WSL/Ubuntu detected
-    message(STATUS "x86_64 platform detected")
-endif()
+# Data Processing
+pandas>=2.0.0               # Ground truth data loading and manipulation
 
-# 4. Find Dependencies
-find_package(OpenCV REQUIRED)           # Locate OpenCV library
-
-# 5. Include Directories (where to find .h files)
-include_directories(
-    ${OpenCV_INCLUDE_DIRS}              # OpenCV headers
-    ${CMAKE_SOURCE_DIR}/include         # Your headers
-    ${CMAKE_SOURCE_DIR}/src
-)
-
-# 6. Collect Source Files (auto-discovers all .c and .cpp files)
-file(GLOB SOURCES "src/*.c" "src/*.cpp")
-
-# 7. Build Executable
-add_executable(pose_estimator ${SOURCES})
-
-# 8. Link Libraries
-target_link_libraries(pose_estimator ${OpenCV_LIBS})
-
-# 9. Install (for 'make install' - copies binary to /usr/local/bin)
-install(TARGETS pose_estimator DESTINATION bin)
+# Visualization
+plotly>=5.14.0              # Interactive 3D trajectory plots
+matplotlib>=3.7.0           # Video generation and 2D plotting
 ```
 
-### Where CMakeLists.txt is Used
+### Where requirements.txt is Used
 
-**1. Local Builds (Direct)**
+**1. Local Installation**
 ```bash
-mkdir build && cd build
-cmake ..                    # ← CMakeLists.txt reads here
-cmake --build .             # ← Compiles using generated Makefile
+pip install -r requirements.txt
 ```
 
-**2. Inside Docker (Dockerfile Stage 2)**
+**2. Inside Docker (Dockerfile)**
 ```dockerfile
-# Stage 2: Project Builder
-COPY CMakeLists.txt ./
-RUN cmake -D CMAKE_BUILD_TYPE=Release ..  # ← CMakeLists.txt used here
-RUN make -j4
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 ```
 
-**Key Feature:** CMakeLists.txt auto-discovers files in `src/`, so partners can add `.cpp` files without editing it!
+**Key Feature:** Pin major versions with `>=` to ensure compatibility while allowing minor updates!
 
 ---
 
-## 🐳 Understanding Multi-Stage Docker Build
+## 🐳 Understanding Python Docker Build
 
-### Why Multi-Stage Build?
+### Why Python Docker is Simpler
 
-**Without Multi-Stage (Single-Stage Build):**
+**Python with Pre-built Wheels:**
 ```
-Final Image Size: ~2.5 GB
-Contains: Source code, build tools, intermediate files, OpenCV source, docs, examples
-```
-
-**With Multi-Stage Build:**
-```
-Final Image Size: ~150 MB (94% smaller!)
-Contains: Only compiled binary + runtime libraries
+Final Image Size: ~500 MB
+Build Time: 2-3 minutes
+Contains: Python runtime + pip packages + source code
 ```
 
-### The Three Stages Explained
+**Advantages over C++ Multi-Stage Build:**
+- ✅ No compilation needed (opencv-python has pre-built binaries)
+- ✅ Faster builds (pip downloads wheels instead of compiling)
+- ✅ Simpler Dockerfile (single stage instead of 3)
+- ✅ Easier to debug (can install packages interactively)
 
-#### **Stage 1: opencv-builder** (~1.5 GB intermediate image)
+### The Single-Stage Build Explained
+
 ```dockerfile
-FROM debian:bullseye-slim AS opencv-builder
+FROM python:3.9-slim
 
-# Download OpenCV 4.8.1 source (~50 MB)
-RUN wget https://github.com/opencv/opencv/archive/4.8.1.zip
+# Install system dependencies (required by opencv-python)
+RUN apt-get update && apt-get install -y \
+    libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 libgomp1
 
-# Build OpenCV with minimal flags
-RUN cmake -D BUILD_LIST=core,imgproc,features2d,calib3d ...
-RUN make -j4
-RUN make install
-```
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-**What it does:**
-- Downloads OpenCV source code
-- Compiles OpenCV from scratch (~15-20 min)
-- Only builds 6 essential modules (not all 20+)
-- Platform detection: Uses SSE2 (x86) or NEON (ARM)
-- **Result:** OpenCV libraries in `/usr/local/lib`
-
-**Why needed?** OpenCV binary packages don't have optimal flags for our use case.
-
----
-
-#### **Stage 2: project-builder** (~100 MB intermediate image)
-```dockerfile
-FROM debian:bullseye-slim AS project-builder
-
-# Copy OpenCV from Stage 1 (no rebuild!)
-COPY --from=opencv-builder /usr/local /usr/local
-
-# Copy project source
+# Copy source code
 COPY src/ ./src/
-COPY include/ ./include/
-COPY CMakeLists.txt ./
 
-# Build project using CMakeLists.txt
-RUN cmake -D CMAKE_BUILD_TYPE=Release ..
-RUN make -j4
-RUN make install
+# Set Python path and default command
+ENV PYTHONPATH=/app:$PYTHONPATH
+CMD ["python3"]
 ```
 
 **What it does:**
-- Reuses OpenCV from Stage 1 (via `COPY --from=opencv-builder`)
-- Compiles your C++ code using CMakeLists.txt
-- **Result:** `pose_estimator` binary in `/usr/local/bin`
+1. Starts with official Python 3.9 slim image (~150 MB)
+2. Installs system libraries needed by OpenCV (libgl1, etc.)
+3. Installs Python packages via pip (~300 MB for opencv-python + deps)
+4. Copies Python source code (~1 MB)
+5. Sets up environment and entry point
 
-**Why needed?** Separates OpenCV build (slow, rarely changes) from project build (fast, changes often).
-
----
-
-#### **Stage 3: runtime** (~150 MB final image)
-```dockerfile
-FROM debian:bullseye-slim
-
-# Copy ONLY what's needed to run (not build)
-COPY --from=opencv-builder /usr/local/lib /usr/local/lib
-COPY --from=project-builder /usr/local/bin/pose_estimator /usr/local/bin/
-
-# Install minimal runtime dependencies (JPEG, PNG libraries)
-RUN apt-get install libjpeg62-turbo libpng16-16
-
-ENTRYPOINT ["/usr/local/bin/pose_estimator"]
-```
-
-**What it does:**
-- Starts fresh with minimal Debian base
-- Copies compiled OpenCV libraries (not source)
-- Copies compiled binary (not source code)
-- No build tools (gcc, cmake, wget) → smaller image
-
-**Why needed?** Production image should only have what's needed to **run**, not **build**.
-
----
-
-### Docker Layer Caching Magic
+### Docker Layer Caching
 
 ```
 First Build:
-  Stage 1: Build OpenCV        → 20 minutes
-  Stage 2: Build project       → 30 seconds
-  Stage 3: Create runtime      → 10 seconds
+  Install system deps          → 30 seconds
+  Install Python packages      → 90 seconds
+  Copy source code             → 1 second
 
-After Editing src/main.cpp:
-  Stage 1: ✅ CACHED           → 0 seconds (unchanged)
-  Stage 2: Rebuild             → 30 seconds (source changed)
-  Stage 3: Rebuild             → 10 seconds (depends on Stage 2)
+After Editing src/pose_matcher.py:
+  Install system deps          → ✅ CACHED (0 seconds)
+  Install Python packages      → ✅ CACHED (0 seconds)
+  Copy source code             → 1 second (rebuilds this layer only)
 ```
 
-Docker caches layers until something changes. Changing `src/main.cpp` doesn't invalidate Stage 1!
+Docker caches layers efficiently. Changing source code doesn't reinstall dependencies!
 
 ---
 
@@ -251,130 +183,137 @@ Docker caches layers until something changes. Changing `src/main.cpp` doesn't in
 
 | Type | Scope | When Set | Example |
 |------|-------|----------|---------|
-| `ARG` | Build-time only | Before/during `docker build` | Platform detection |
-| `ENV` | Build + Runtime | Persists in running container | Environment variables |
+| `ARG` | Build-time only | Before/during `docker build` | Python version, entry file |
+| `ENV` | Build + Runtime | Persists in running container | PYTHONPATH, ENTRY_FILE |
 
 ### Where ARGs Are Set
 
 #### **1. ARG Defined in Dockerfile (with defaults)**
 
 ```dockerfile
-# Line 7-8 in Dockerfile
 ARG PLATFORM=linux/amd64        # Default: x86_64
-ARG OPENCV_VERSION=4.8.1        # Default: OpenCV 4.8.1
+ARG PYTHON_VERSION=3.9          # Default: Python 3.9
+ARG ENTRY_FILE=""               # Default: empty (interactive shell)
 ```
 
 These are **default values**. You can override them during build.
 
 ---
 
-#### **2. ARG Auto-Set by Docker Buildx**
+#### **2. Overriding ARGs at Build Time**
 
-```dockerfile
-# Line 15, 21, 128 in Dockerfile
-ARG TARGETPLATFORM
-```
-
-**Where it's set:** Automatically by Docker based on your host platform
-
-**Possible values:**
-- `linux/amd64` → WSL, Ubuntu on x86_64
-- `linux/arm64` → Raspberry Pi 4
-
-**How Docker determines it:**
 ```bash
-docker build .              # Auto-detects your host platform
-docker buildx build --platform linux/arm64 .  # Override for cross-compilation
+# Build with Python 3.10
+docker build --build-arg PYTHON_VERSION=3.10 -t pose-estimator .
+
+# Build with specific entry file
+docker build --build-arg ENTRY_FILE=src/plots_graths.py -t pose-estimator .
+
+# Build with multiple args
+docker build \
+  --build-arg PYTHON_VERSION=3.11 \
+  --build-arg ENTRY_FILE=src/pose_matcher.py \
+  -t pose-estimator .
 ```
 
 ---
 
-#### **3. Using ARG in Dockerfile**
+#### **3. Using ENTRY_FILE in Docker**
 
 ```dockerfile
-# Line 50-71 in Dockerfile
-RUN case "$TARGETPLATFORM" in \
-        "linux/amd64") \
-            CMAKE_FLAGS="-D CPU_BASELINE=SSE2"; \
-            BUILD_JOBS=4; \
-            ;; \
-        "linux/arm64") \
-            CMAKE_FLAGS="-D ENABLE_NEON=ON"; \
-            BUILD_JOBS=2; \
-            ;; \
-    esac
+ARG ENTRY_FILE=""
+ENV ENTRY_FILE=${ENTRY_FILE}
+
+CMD if [ -n "$ENTRY_FILE" ]; then python3 $ENTRY_FILE; else python3; fi
 ```
 
-The `$TARGETPLATFORM` variable is used in shell script inside `RUN` to choose platform-specific flags.
+**Behavior:**
+- If `ENTRY_FILE` is empty → Starts Python interactive shell
+- If `ENTRY_FILE` is set → Runs the specified Python script
 
 ---
 
 ### ARG Flow Diagram
 
 ```
-┌──────────────────────────┐
-│ docker build .           │
-└───────────┬──────────────┘
-            │
-            ▼
 ┌──────────────────────────────────────────┐
-│ Docker Buildx (auto-detects)             │
-│ TARGETPLATFORM = "linux/amd64"           │ ← Set automatically
-│ BUILDPLATFORM = "linux/amd64"            │
+│ docker build --build-arg ENTRY_FILE=...  │
 └───────────┬──────────────────────────────┘
             │
             ▼
 ┌──────────────────────────────────────────┐
 │ Dockerfile ARG (defaults)                │
-│ ARG PLATFORM=linux/amd64                 │ ← Can override
-│ ARG OPENCV_VERSION=4.8.1                 │ ← Can override
-│ ARG TARGETPLATFORM                       │ ← From Docker
+│ ARG PLATFORM=linux/amd64                 │
+│ ARG PYTHON_VERSION=3.9                   │
+│ ARG ENTRY_FILE=""                        │ ← Override here
 └───────────┬──────────────────────────────┘
             │
             ▼
 ┌──────────────────────────────────────────┐
-│ Use in RUN commands                      │
-│ case "$TARGETPLATFORM" in ...            │ ← Read the value
-│ CMAKE_FLAGS based on platform            │
+│ Pass to ENV (persists in container)      │
+│ ENV ENTRY_FILE=${ENTRY_FILE}             │
+└───────────┬──────────────────────────────┘
+            │
+            ▼
+┌──────────────────────────────────────────┐
+│ Use in CMD                               │
+│ if [ -n "$ENTRY_FILE" ]; then ...        │ ← Run script or shell
 └──────────────────────────────────────────┘
 ```
 
 ---
 
-## Local Build (Without Docker)
+## Local Setup (Without Docker)
 
 ### Prerequisites
 
-- CMake 3.10 or higher
-- C++ compiler with C++11 support
-- OpenCV 4.x installed
+- Python 3.9 or higher
+- pip (Python package manager)
 
-### Build Steps
+### Installation Steps
 
 ```bash
-# Create build directory and compile
-make build
+# Install dependencies
+make install
 
 # Or manually:
-mkdir -p build
-cd build
-cmake ..
-cmake --build .
+pip install -r requirements.txt
 ```
-
-This creates the executable at `build/pose_estimator`.
 
 ### Run Locally
 
 ```bash
-# Using Makefile wrapper
-make run IMG1=path/to/image1.jpg IMG2=path/to/image2.jpg
+# Run evaluation with visualization
+make run-eval
 
-# Or directly
-./build/pose_estimator path/to/image1.jpg path/to/image2.jpg
+# Or manually:
+python -c "
+from src.plots_graths import PosePlotter
+plotter = PosePlotter('silmulator_data/simple_movement', step=15)
+plotter.run()
+"
+
+# Run single frame pair
+python -c "
+from src.pose_matcher import PoseMatcher
+from src.image_loader import load_image_pair
+
+matcher = PoseMatcher('silmulator_data/simple_movement',
+                      'silmulator_data/simple_movement/camera_poses.txt')
+img1, img2 = load_image_pair(
+    'silmulator_data/simple_movement/images/000000.png',
+    'silmulator_data/simple_movement/images/000015.png',
+    to_gray=True
+)
+yaw, pitch, roll = matcher.match(img1, img2, prev_frame_index=0)
+print(f'Yaw: {yaw:.2f}°, Pitch: {pitch:.2f}°, Roll: {roll:.2f}°')
+"
+
+# Generate video
+make run-video
 ```
 
-### Clean Build
+### Clean Python Cache
 
 ```bash
 make clean
@@ -385,19 +324,39 @@ make clean
 ### Build Image
 
 ```bash
+# Default: interactive Python shell
 make docker-build
+
+# With specific entry file
+make docker-build ENTRY_FILE=src/plots_graths.py
 ```
 
-This builds a Docker image named `pose-estimator:latest` with OpenCV and the compiled executable.
+This builds a Docker image named `pose-estimator:latest` with Python 3.9, all dependencies, and your source code.
 
 ### Run with Docker
 
 ```bash
-# Default: uses images/before.jpg and images/after.jpg
+# Interactive Python shell with mounted data
 make docker-run
 
-# Custom images (place them in images/ directory)
-docker run --rm -v $(pwd)/images:/data pose-estimator:latest /data/img1.jpg /data/img2.jpg
+# Interactive bash shell
+make docker-shell
+
+# Run specific Python command
+docker run --rm \
+  -v $(pwd)/silmulator_data:/app/silmulator_data \
+  -v $(pwd)/results:/app/results \
+  pose-estimator:latest \
+  python -c "from src.pose_matcher import PoseMatcher; print('Hello from Docker')"
+
+# Run evaluation inside container
+docker run --rm \
+  -v $(pwd)/silmulator_data:/app/silmulator_data \
+  -v $(pwd)/results:/app/results \
+  pose-estimator:latest \
+  python -c "from src.plots_graths import PosePlotter; \
+             plotter = PosePlotter('silmulator_data/simple_movement', step=15); \
+             plotter.run()"
 ```
 
 ## Makefile Targets
@@ -405,37 +364,42 @@ docker run --rm -v $(pwd)/images:/data pose-estimator:latest /data/img1.jpg /dat
 | Target | Description |
 |--------|-------------|
 | `make help` | Show available commands |
-| `make build` | Build locally using CMake |
-| `make clean` | Remove build directory |
+| `make install` | Install Python dependencies locally |
+| `make run-eval` | Run pose estimation evaluation |
+| `make run-plot` | Generate 3D trajectory plots |
+| `make run-video` | Generate video with GT overlay |
+| `make clean` | Remove Python cache files |
 | `make docker-build` | Build Docker image |
-| `make docker-run` | Run Docker container |
-| `make run IMG1=... IMG2=...` | Run locally built executable |
+| `make docker-run` | Run Docker container (interactive) |
+| `make docker-shell` | Open bash shell in container |
 
 ## Platform Notes
 
 ### Windows
 
 - Use Git Bash, WSL, or PowerShell for make commands
-- Ensure OpenCV is in your PATH for local builds
+- Python 3.9+ required (download from python.org or Windows Store)
 - Docker Desktop required for Docker builds
 
 ### Linux
 
-- Install build essentials: `sudo apt install build-essential cmake`
-- Install OpenCV: `sudo apt install libopencv-dev`
+- Install Python: `sudo apt install python3 python3-pip`
+- System dependencies for opencv-python: `sudo apt install libgl1 libglib2.0-0`
 
 ### macOS
 
-- Install via Homebrew: `brew install cmake opencv`
+- Install via Homebrew: `brew install python@3.9`
+- System dependencies usually pre-installed
 
 ### Raspberry Pi
 
-- The Dockerfile includes ARM/NEON optimizations
-- Build on a PC and transfer the image for faster builds:
+- Python is pre-installed on Raspberry Pi OS
+- opencv-python has ARM64 wheels (no compilation needed)
+- For Docker builds:
 
 ```bash
-# On PC: build and save
-docker build -t pose-estimator:latest .
+# On PC: build ARM64 image
+docker buildx build --platform linux/arm64 -t pose-estimator:latest .
 docker save pose-estimator:latest | gzip > pose-estimator.tar.gz
 
 # Transfer to Pi
@@ -443,44 +407,54 @@ scp pose-estimator.tar.gz pi@raspberrypi.local:~
 
 # On Pi: load and run
 docker load < pose-estimator.tar.gz
-docker run --rm -v ~/images:/data pose-estimator:latest /data/before.jpg /data/after.jpg
-```
-
-
-### Integration Testing
-
-```bash
-# Build Docker image with both modules
-make docker-build
-
-# Run full pipeline
-make docker-run
+docker run --rm \
+  -v ~/silmulator_data:/app/silmulator_data \
+  pose-estimator:latest python -c "from src.pose_matcher import PoseMatcher; print('Works on Pi!')"
 ```
 
 ## Troubleshooting
 
-### OpenCV Not Found
+### ImportError: No module named 'cv2'
 
-**Error:** `Could not find OpenCV`
+**Error:** `ImportError: No module named 'cv2'`
 
 **Solution:**
 ```bash
-# Linux
-sudo apt install libopencv-dev
+# Ensure opencv-python is installed
+pip install opencv-python
 
-# macOS
-brew install opencv
-
-# Windows
-# Download from opencv.org and set OpenCV_DIR environment variable
+# Or reinstall all dependencies
+pip install -r requirements.txt
 ```
 
-### Build Fails
+### OpenCV ImportError with Missing Libraries
+
+**Error:** `ImportError: libGL.so.1: cannot open shared object file`
+
+**Solution (Linux):**
+```bash
+sudo apt install libgl1 libglib2.0-0 libsm6 libxext6 libxrender1
+```
+
+### Python Version Issues
+
+**Error:** `SyntaxError` or version-related errors
+
+**Solution:**
+```bash
+# Check Python version (requires 3.9+)
+python --version
+
+# Use specific Python version
+python3.9 -m pip install -r requirements.txt
+```
+
+### Clean Installation
 
 ```bash
-# Clean and rebuild
+# Remove cache and reinstall
 make clean
-make build
+make install
 ```
 
 ### Docker Issues
@@ -488,4 +462,8 @@ make build
 ```bash
 # Rebuild without cache
 docker build --no-cache -t pose-estimator:latest .
+
+# Check Docker logs
+docker run --rm -it pose-estimator:latest bash
+python -c "import cv2; print(cv2.__version__)"
 ```

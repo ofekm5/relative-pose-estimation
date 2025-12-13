@@ -2,9 +2,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import cv2
-from image_loader import load_image_pair
-from feature_extractor import create_feature_extractor, detect_and_compute
-from matcher import create_matcher, match_descriptors
+from .image_loader import load_image_pair
+from .feature_extractor import create_feature_extractor, detect_and_compute
+from .matcher import create_matcher, match_descriptors
 
 class PoseMatcher:
     def __init__(
