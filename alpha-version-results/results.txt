@@ -1,0 +1,50 @@
+Pics 1, 2 Comparison:
+Camera positions in world frame (up to scale):
+ Camera 1: (0.0, 0.0, 0.0)
+ Camera 2: (X=0.102404, Y=0.021193, Z=0.994517)
+
+Orientation of camera 2 relative to camera 1:
+ (radians)
+  azimuth (yaw) = 0.006561
+  pitch         = 0.001184
+  roll          = 0.002995
+
+ (degrees)
+  azimuth (yaw) = 0.376 deg
+  pitch         = 0.068 deg
+  roll          = 0.172 deg
+
+
+Pics 1,3 Comparison:
+Camera positions in world frame (up to scale):
+ Camera 1: (0.0, 0.0, 0.0)
+ Camera 2: (X=-0.205423, Y=-0.264675, Z=0.942204)
+
+Orientation of camera 2 relative to camera 1:
+ (radians)
+  azimuth (yaw) = -1.338838
+  pitch         = -0.554759
+  roll          = 2.314326
+
+ (degrees)
+  azimuth (yaw) = -76.710 deg
+  pitch         = -31.785 deg
+  roll          = 132.601 deg​
+
+
+
+Pics 2&3 Comparison:
+Camera positions in world frame (up to scale):
+ Camera 1: (0.0, 0.0, 0.0)
+ Camera 2: (X=0.095444, Y=0.026996, Z=0.995069)
+
+Orientation of camera 2 relative to camera 1:
+ (radians)
+  azimuth (yaw) = 0.005487
+  pitch         = 0.000135
+  roll          = 0.002372
+
+ (degrees)
+  azimuth (yaw) = 0.314 deg
+  pitch         = 0.008 deg
+  roll          = 0.136 deg
