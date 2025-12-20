@@ -32,4 +32,9 @@ COPY src/ ./src/
 
 ENV PYTHONPATH=/app:$PYTHONPATH
 
-CMD if [ -n "$ENTRY_FILE" ]; then python3 $ENTRY_FILE; else python3; fi
+CMD if [ -n "$ENTRY_FILE" ]; then \
+        MODULE=$(echo "$ENTRY_FILE" | sed 's/\.py$//' | sed 's/\//./g'); \
+        python3 -m "$MODULE"; \
+    else \
+        python3; \
+    fi
