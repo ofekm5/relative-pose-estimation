@@ -20,7 +20,7 @@ class PoseEstimator:
                  feature_method="ORB",
                  norm_type="Hamming",
                  max_matches=500,
-                 nfeatures=2000):
+                 nfeatures=4000):
         """
         Initialize pose estimator.
 
@@ -55,7 +55,13 @@ class PoseEstimator:
         method = self.feature_method.upper()
 
         if method == "ORB":
-            return cv2.ORB_create(nfeatures=self.nfeatures)
+            return cv2.ORB_create(
+                nfeatures=self.nfeatures,
+                scaleFactor=1.1,
+                nlevels=12,
+                fastThreshold=15,
+                scoreType=cv2.ORB_HARRIS_SCORE
+            )
 
         if method == "SIFT":
             return cv2.SIFT_create()

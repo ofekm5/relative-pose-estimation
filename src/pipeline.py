@@ -149,7 +149,7 @@ class PoseEstimationPipeline:
         # 5. Create visualizations
         if create_plot:
             print(f"[INFO] Creating 3D trajectory plot...")
-            gt_trajectory = self.gt_loader.get_trajectory(step=1)
+            gt_trajectory = self.gt_loader.get_trajectory(step=step)
             self.visualizer.plot_3d_trajectory(
                 gt_trajectory=gt_trajectory,
                 evaluation_results=evaluation_results,

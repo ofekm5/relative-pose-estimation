@@ -56,26 +56,23 @@ class Visualizer:
         dirs_est = []
         labels = []
 
-        # Add first frame (use GT for both since EST starts from second frame)
-        first_dir = self._rpy_to_direction(gt_roll[0], gt_pitch[0], gt_yaw[0])
-        dirs_gt.append(first_dir * arrow_scale)
-        dirs_est.append(first_dir * arrow_scale)
-
-        # Subsequent frames
+        # Build GT directions for all frames
         for i in range(len(gt_roll)):
-            # GT direction
             d_gt = self._rpy_to_direction(gt_roll[i], gt_pitch[i], gt_yaw[i])
             dirs_gt.append(d_gt * arrow_scale)
 
-            # EST direction
-            d_est = self._rpy_to_direction(est_roll[i], est_pitch[i], est_yaw[i])
-            dirs_est.append(d_est * arrow_scale)
-
-            # Label
             start_frame = frames[i] if i < len(frames) else 0
             labels.append(f"{start_frame}-{start_frame + step}")
 
         dirs_gt = np.array(dirs_gt)
+
+        # Build EST directions for all estimates
+        for i in range(len(est_roll)):
+            d_est = self._rpy_to_direction(est_roll[i], est_pitch[i], est_yaw[i])
+            dirs_est.append(d_est * arrow_scale)
+
+        # Prepend first GT arrow to EST (EST starts from second frame)
+        dirs_est = [dirs_gt[0]] + dirs_est
         dirs_est = np.array(dirs_est)
 
         # Create plot
@@ -85,6 +82,9 @@ class Visualizer:
         COLOR_EST = "blue"
 
         # GT trajectory path
+        # Create frame indices for hover tooltips
+        all_frames = np.arange(0, len(gt_positions) * step, step)[:len(gt_positions)]
+
         fig.add_trace(go.Scatter3d(
             x=gt_positions[:, 0],
             y=gt_positions[:, 1],
@@ -92,7 +92,8 @@ class Visualizer:
             mode="lines",
             line=dict(width=5, color=COLOR_GT),
             name="GT path",
-            hovertemplate="x: %{x:.3f}<br>y: %{y:.3f}<br>z: %{z:.3f}<extra></extra>"
+            customdata=all_frames,
+            hovertemplate="frame: %{customdata}<br>x: %{x:.3f}<br>y: %{y:.3f}<br>z: %{z:.3f}<extra></extra>"
         ))
 
         # Draw orientation arrows

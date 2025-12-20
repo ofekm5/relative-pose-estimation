@@ -18,16 +18,19 @@ def rotation_to_euler_yup(R):
     Returns:
         tuple: (yaw_deg, pitch_deg, roll_deg) in degrees
     """
-    pitch = -np.arcsin(R[1, 2])
+    # Extract pitch from R[2,1] = sin(pitch)
+    pitch = np.arcsin(R[2, 1])
 
-    # Check for gimbal lock
-    if np.isclose(np.cos(pitch), 0.0, atol=1e-6):
+    # Handle gimbal lock (pitch = ±90°)
+    if abs(R[2, 1]) > 0.9999:
         # Gimbal lock case
-        roll = 0.0
-        yaw = np.arctan2(-R[0, 1], R[0, 0])
+        roll = np.arctan2(-R[1, 2], R[1, 1])
+        yaw = 0.0
     else:
         # Normal case
-        yaw = np.arctan2(R[0, 2], R[2, 2])
+        # Yaw from first column (cos(pitch) removes coupling)
+        yaw = np.arctan2(-R[2, 0], R[0, 0])
+        # Roll from row/column after removing yaw/pitch influence
         roll = np.arctan2(R[1, 0], R[1, 1])
 
     # Convert to degrees
