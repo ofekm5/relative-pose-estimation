@@ -10,7 +10,13 @@ def create_feature_extractor(method: str = "ORB"):
 
     if method == "ORB":
         # ORB is free and usually enough
-        return cv2.ORB_create(nfeatures=2000)
+        return cv2.ORB_create(
+                nfeatures=4000,
+                scaleFactor=1.1,
+                nlevels=12,
+                fastThreshold=15,          # נסה 10–25
+                scoreType=cv2.ORB_HARRIS_SCORE
+)
 
     if method == "SIFT":
         # requires opencv-contrib-python and nonfree enabled
