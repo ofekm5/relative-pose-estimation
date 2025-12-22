@@ -3,15 +3,31 @@ import pandas as pd
 import plotly.graph_objects as go
 from pathlib import Path
 from image_loader import load_image_pair
-from pose_matcher import PoseMatcher
+from pose_matcher_full import PoseMatcher
 import cv2
+
 
 class PosePlotter:
 
-    def __init__(self, base_path, step=15, arrow_scale=0.3):
+    def __init__(
+        self,
+        base_path,
+        step=15,
+        arrow_scale=0.3,
+
+        # ---- NEW: line-assisted pose estimation (forwarded to PoseMatcher) ----
+        use_lines: bool = True,
+        line_dilate_px: int = 2,
+        min_points_after_line_filter: int = 40,
+    ):
         self.base_path = Path(base_path)
         self.step = step
         self.arrow_scale = arrow_scale
+
+        # ---- NEW ----
+        self.use_lines = bool(use_lines)
+        self.line_dilate_px = int(line_dilate_px)
+        self.min_points_after_line_filter = int(min_points_after_line_filter)
 
         self.gt_path = self.base_path / "camera_poses.txt"
         self.images_dir = self.base_path / "images"
@@ -67,12 +83,19 @@ class PosePlotter:
         self.df = pd.read_csv(self.gt_path, delim_whitespace=True)
         self.df_sub = self.df[self.df["frame"] % self.step == 0]
 
+        # ---- CHANGED: PoseMatcher with line-assisted filtering ----
         self.matcher = PoseMatcher(
             base_dir=str(self.base_path),
             gt_path=str(self.gt_path),
             feature_method="ORB",
             norm_type="Hamming",
             max_matches=500,
+        )
+
+        print(
+            f"[INFO] PoseMatcher created: use_lines={self.use_lines}, "
+            f"line_dilate_px={self.line_dilate_px}, "
+            f"min_points_after_line_filter={self.min_points_after_line_filter}"
         )
 
     # --------------------------------------------------------
@@ -158,8 +181,6 @@ class PosePlotter:
             ("EST", COLOR_EST, dirs_est)
         ]:
 
-            # צבע Hover
-            hover_bg = color  # red / blue
             hoverlabel_cfg = dict(
                 bgcolor=f"rgba({255 if color == 'red' else 0},0,{255 if color == 'blue' else 0},0.85)",
                 font=dict(color="white")
@@ -202,10 +223,10 @@ class PosePlotter:
                 xaxis=dict(title="X", showbackground=True, gridcolor="lightgray"),
                 yaxis=dict(title="Y", showbackground=True, gridcolor="lightgray"),
                 zaxis=dict(title="Z", showbackground=True, gridcolor="lightgray"),
-                aspectmode="cube",  # כל הצירים באותו סקייל -> מרגיש יותר תלת מימד
+                aspectmode="cube",
                 camera=dict(
-                    eye=dict(x=1.8, y=1.8, z=1.4),  # מאיפה המצלמה "מסתכלת"
-                    up=dict(x=0, y=0, z=1)  # כיוון "למעלה" (Z למעלה)
+                    eye=dict(x=1.8, y=1.8, z=1.4),
+                    up=dict(x=0, y=0, z=1)
                 ),
             ),
             title="GT + EST Orientation (3D view)"
@@ -214,7 +235,7 @@ class PosePlotter:
         fig.write_html(str(output_html))
         print(f"[INFO] 3D plot saved to: {output_html}")
 
-        fig.show()  # OPTIONAL – keep if you still want to see it liv
+        fig.show()
 
     # --------------------------------------------------------
     # MAIN ENTRY POINT
@@ -225,8 +246,6 @@ class PosePlotter:
         origins, dirs_gt, dirs_est, labels = self.build_vectors()
         self.plot(origins, dirs_gt, dirs_est, labels)
 
-
-
     def make_video(self, output_file, fps=10):
         """
         יוצר סרט מהתמונות ב-images/, ועל כל פריים כותב:
@@ -234,13 +253,10 @@ class PosePlotter:
         - זוויות GT (roll, pitch, yaw)
         - זוויות EST (roll, pitch, yaw)
         """
-
-        # לוודא שהנתונים מחושבים
         if self.df is None or self.df_sub is None or len(self.est_yaw) == 0:
             self.load_gt()
             self.compute_estimated()
 
-        # נבדוק פריים ראשון שיש לו EST (מתחיל מ-i=1)
         first_frame_idx = int(self.df_sub.iloc[1]["frame"])
         first_img_path = self.images_dir / f"{first_frame_idx:06d}.png"
         first_img = cv2.imread(str(first_img_path))
@@ -255,7 +271,6 @@ class PosePlotter:
         writer = cv2.VideoWriter(str(video_path), fourcc, fps, (width, height))
         print(f"[INFO] Saving video to: {video_path}")
 
-        # est_*[i-1] מתאים ל df_sub.iloc[i]
         for i in range(1, len(self.df_sub)):
             row = self.df_sub.iloc[i]
             frame_idx = int(row["frame"])
@@ -272,49 +287,23 @@ class PosePlotter:
             gt_pitch = float(row["pitch"])
             gt_yaw   = float(row["yaw"])
 
-            # --- EST angles (מה-PoseMatcher) ---
+            # --- EST angles ---
             est_roll  = float(self.est_roll[i - 1])
             est_pitch = float(self.est_pitch[i - 1])
             est_yaw   = float(self.est_yaw[i - 1])
 
-            # --- Text lines ---
             text_frame = f"Frame: {frame_idx}"
             text_gt    = f"GT   r={gt_roll:.1f}, p={gt_pitch:.1f}, y={gt_yaw:.1f} deg"
             text_est   = f"EST  r={est_roll:.1f}, p={est_pitch:.1f}, y={est_yaw:.1f} deg"
 
-            # --- Draw text on frame ---
-            # Frame number (white)
-            cv2.putText(
-                frame, text_frame,
-                (30, 50),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                1.0,
-                (255, 255, 255),
-                2,
-                cv2.LINE_AA
-            )
+            cv2.putText(frame, text_frame, (30, 50),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2, cv2.LINE_AA)
 
-            # GT (red)
-            cv2.putText(
-                frame, text_gt,
-                (30, 100),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.8,
-                (0, 0, 255),   # BGR: red
-                2,
-                cv2.LINE_AA
-            )
+            cv2.putText(frame, text_gt, (30, 100),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2, cv2.LINE_AA)
 
-            # EST (blue)
-            cv2.putText(
-                frame, text_est,
-                (30, 145),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.8,
-                (255, 0, 0),   # BGR: blue
-                2,
-                cv2.LINE_AA
-            )
+            cv2.putText(frame, text_est, (30, 145),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2, cv2.LINE_AA)
 
             writer.write(frame)
 
@@ -322,14 +311,22 @@ class PosePlotter:
         print(f"[INFO] Video saved to: {video_path}")
 
 
-
 if __name__ == '__main__':
     base_path = "/home/orr/university_projects/relative-pose-estimation/silmulator_data/simple_movement"
 
-    plotter = PosePlotter(base_path)
+    plotter = PosePlotter(
+        base_path,
+        step=15,
+        arrow_scale=0.3,
 
-    # אם אתה רוצה גם פלוט 3D:
+        # NEW: turn on/off here
+        use_lines=True,
+        line_dilate_px=2,
+        min_points_after_line_filter=40,
+    )
+
+    # 3D plot
     plotter.run()
 
-    # ועכשיו סרט:
+    # video
     plotter.make_video(output_file="yaw_debug.mp4", fps=5)
