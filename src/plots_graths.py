@@ -312,8 +312,9 @@ class PosePlotter:
 
 
 if __name__ == '__main__':
-    base_path = "/home/orr/university_projects/relative-pose-estimation/silmulator_data/simple_movement"
 
+    # for data silmulator
+    base_path = "/home/orr/university_projects/relative-pose-estimation/silmulator_data/simple_movement"
     plotter = PosePlotter(
         base_path,
         step=15,
@@ -324,6 +325,9 @@ if __name__ == '__main__':
         line_dilate_px=2,
         min_points_after_line_filter=40,
     )
+
+    # for phone simulator
+
 
     # 3D plot
     plotter.run()

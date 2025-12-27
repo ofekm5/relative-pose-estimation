@@ -2,6 +2,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import cv2
+import os
 import itertools
 from image_loader import load_image_pair
 from feature_extractor import create_feature_extractor, detect_and_compute
@@ -16,6 +17,8 @@ class PoseMatcher:
         self,
         base_dir,
         gt_path,
+        K,
+        source,
         feature_method: str = "ORB",
         norm_type: str = "Hamming",
         max_matches: int = 500,
@@ -42,9 +45,12 @@ class PoseMatcher:
         self.vp_iters = 12
         self.vp_lm_lambda = 1e-2
         self.vp_cost_improve_eps = 1e-3
-
+        self.K = K
         # --- Load GT once ---
-        self.df_gt = pd.read_csv(gt_path, sep=r"\s+")
+        if source =="simulator":
+            self.df_gt = pd.read_csv(gt_path, sep=r"\s+")
+        else:
+            self.df_gt = pd.read_csv(gt_path)
 
         # --- Build K once from a sample image ---
         # take first frame from GT:
@@ -52,7 +58,7 @@ class PoseMatcher:
         sample_path = self.base_dir / "images" / f"{sample_frame:06d}.png"
         sample_img, _ = load_image_pair(str(sample_path), str(sample_path), to_gray=True)
 
-        self.K = self._build_K(sample_img)
+
 
         # --- Build feature extractor + matcher once ---
         self.extractor = create_feature_extractor(self.feature_method)
@@ -92,29 +98,7 @@ class PoseMatcher:
     # ------------------------------
     #  Intrinsics (K)
     # ------------------------------
-    @staticmethod
-    def _build_K(image):
-        """
-        Build intrinsic matrix K from one sample image,
-        using the same scaling logic you used before.
-        """
-        h, w = image.shape[:2]
 
-        scale_x = w / 960.0
-        scale_y = h / 720.0
-
-        fx = 924.82939686 * scale_x
-        fy = 920.4766382 * scale_y
-        cx = 468.24930789 * scale_x
-        cy = 353.65863024 * scale_y
-
-        K = np.array([
-            [fx, 0,   cx],
-            [0,  fy,  cy],
-            [0,  0,   1]
-        ])
-
-        return K
 
     # ------------------------------
     #  YPR → rotation matrix (same convention as your code)
@@ -466,9 +450,6 @@ class PoseMatcher:
         # 4b) VP refinement (closest-to-paper), with strict gating + cost gate
         if getattr(self, "use_vp_refinement", True):
             # compute / refresh K if image shape changed
-            if not hasattr(self, "_K_shape") or self._K_shape != prev_image.shape[:2]:
-                self.K = self._build_K(prev_image)
-                self._K_shape = prev_image.shape[:2]
 
             Delta_prev, ok1, dbg1 = PoseMatcher.estimate_manhattan_dirs_from_image(
                 prev_image, self.K,
@@ -522,26 +503,89 @@ class PoseMatcher:
 
 
 
-if __name__ == '__main__':
+
+# for silmulator
+
+
+
+def build_K_Simulator(image):
+    """
+    Build intrinsic matrix K from one sample image,
+    using the same scaling logic you used before.
+    """
+    h, w = image.shape[:2]
+
+    scale_x = w / 960.0
+    scale_y = h / 720.0
+
+    fx = 924.82939686 * scale_x
+    fy = 920.4766382 * scale_y
+    cx = 468.24930789 * scale_x
+    cy = 353.65863024 * scale_y
+
+    K = np.array([
+            [fx, 0,   cx],
+            [0,  fy,  cy],
+            [0,  0,   1]
+        ])
+
+    return K
+
+
+CALIB_W, CALIB_H = 2000, 1126  # resolution used during calibration
+
+CALIB_NPZ = "../phone_camera/camera_calibration_code/calibration_filtered.npz"
+def build_K_Phone(image):
+    """
+    Build intrinsic matrix K from one sample image,
+    using the same scaling logic you used before.
+    """
+    if not os.path.isfile(CALIB_NPZ):
+        raise RuntimeError(f"Calibration file not found: {CALIB_NPZ}")
+    data = np.load(CALIB_NPZ)
+    if "K" not in data.files:
+        raise RuntimeError(f"npz must contain 'K'. Found: {data.files}")
+    K = data["K"].astype(np.float64)
+
+    h, w = image.shape[:2]
+    # SCALE THE K
+    sx = w / float(CALIB_W)
+    sy = h / float(CALIB_H)
+    K2 = K.copy().astype(np.float64)
+    K2[0, 0] *= sx
+    K2[0, 2] *= sx
+    K2[1, 1] *= sy
+    K2[1, 2] *= sy
+
+    return K2
+
+
+
+
+
+def run_Silmulator():
     base_dir = "/home/orr/university_projects/relative-pose-estimation/silmulator_data/simple_movement"
     gt_path = base_dir + "/camera_poses.txt"
 
-    matcher = PoseMatcher(
-        base_dir=base_dir,
-        gt_path=gt_path,
-        feature_method="ORB",
-        norm_type="Hamming",
-        max_matches=500,
-    )
-
-    frame1 = 230
-    frame2 = 245
-
-
+    frame1 = 0
+    frame2 = 1
     img1_path = Path(base_dir) / "images" / f"{frame1:06d}.png"
     img2_path = Path(base_dir) / "images" / f"{frame2:06d}.png"
 
     img1, img2 = load_image_pair(str(img1_path), str(img2_path), to_gray=True)
+    k = build_K_Simulator(img1)
+    matcher = PoseMatcher(
+        base_dir=base_dir,
+        gt_path=gt_path,
+        K=k,
+        source ="simulator",
+        feature_method="ORB",
+        norm_type="Hamming",
+        max_matches=500)
+
+
+
+
 
     orb = cv2.ORB_create(nfeatures=1500)
     kp1, des1 = orb.detectAndCompute(img1, None)
@@ -550,7 +594,6 @@ if __name__ == '__main__':
     bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
     matches = bf.match(des1, des2)
     matches = sorted(matches, key=lambda m: m.distance)[:200]
-
 
     # כל נקודות ORB (לפני match)
     all_pts1 = np.array([kp.pt for kp in kp1])
@@ -564,13 +607,17 @@ if __name__ == '__main__':
     print("est pitch  :", pitch)
     print("est roll   :", roll)
     gt_row = matcher.df_gt[matcher.df_gt["frame"] == frame2].iloc[0]
-    gt_yaw   = float(gt_row["yaw"])
+    gt_yaw = float(gt_row["yaw"])
     gt_pitch = float(gt_row["pitch"])
-    gt_roll  = float(gt_row["roll"])
+    gt_roll = float(gt_row["roll"])
 
     fig, ax = plt.subplots(1, 2, figsize=(14, 6))
-    ax[0].imshow(img1, cmap="gray"); ax[0].set_title(f"Frame {frame1}"); ax[0].axis("off")
-    ax[1].imshow(img2,cmap="gray"); ax[1].set_title(f"Frame {frame2}"); ax[1].axis("off")
+    ax[0].imshow(img1, cmap="gray");
+    ax[0].set_title(f"Frame {frame1}");
+    ax[0].axis("off")
+    ax[1].imshow(img2, cmap="gray");
+    ax[1].set_title(f"Frame {frame2}");
+    ax[1].axis("off")
 
     ax[0].scatter(all_pts1[:, 0], all_pts1[:, 1], s=8, c="red", label="ORB (before match)")
     ax[1].scatter(all_pts2[:, 0], all_pts2[:, 1], s=8, c="red")
@@ -591,3 +638,86 @@ if __name__ == '__main__':
     )
     plt.tight_layout()
     plt.show()
+
+
+def run_RealPhoneCamera():
+    base_dir = "/home/orr/university_projects/relative-pose-estimation/phone_camera/forward_with_stuff"
+    gt_path = base_dir + "/forward_with_stuff.csv"
+    frame1 = 10
+    frame2 = 12
+    img1_path = Path(base_dir) / "images" / f"{frame1:06d}.png"
+    img2_path = Path(base_dir) / "images" / f"{frame2:06d}.png"
+
+    img1, img2 = load_image_pair(str(img1_path), str(img2_path), to_gray=True)
+    k = build_K_Phone(img1)
+    matcher = PoseMatcher(
+        base_dir=base_dir,
+        gt_path=gt_path,
+        K=k,
+        source="phone",
+        feature_method="ORB",
+        norm_type="Hamming",
+        max_matches=500,
+    )
+
+
+
+    orb = cv2.ORB_create(nfeatures=1500)
+    kp1, des1 = orb.detectAndCompute(img1, None)
+    kp2, des2 = orb.detectAndCompute(img2, None)
+
+    bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+    matches = bf.match(des1, des2)
+    matches = sorted(matches, key=lambda m: m.distance)[:200]
+
+    # כל נקודות ORB (לפני match)
+    all_pts1 = np.array([kp.pt for kp in kp1])
+    all_pts2 = np.array([kp.pt for kp in kp2])
+
+    matched_pts1 = np.array([kp1[m.queryIdx].pt for m in matches])
+    matched_pts2 = np.array([kp2[m.trainIdx].pt for m in matches])
+    az, pitch, roll = matcher.match(img1, img2, prev_frame_index=frame1)
+
+    print("est azimuth:", az)
+    print("est pitch  :", pitch)
+    print("est roll   :", roll)
+    gt_row = matcher.df_gt[matcher.df_gt["frame"] == frame2].iloc[0]
+    gt_yaw = float(gt_row["yaw"])
+    gt_pitch = float(gt_row["pitch"])
+    gt_roll = float(gt_row["roll"])
+
+    fig, ax = plt.subplots(1, 2, figsize=(14, 6))
+    ax[0].imshow(img1, cmap="gray");
+    ax[0].set_title(f"Frame {frame1}");
+    ax[0].axis("off")
+    ax[1].imshow(img2, cmap="gray");
+    ax[1].set_title(f"Frame {frame2}");
+    ax[1].axis("off")
+
+    ax[0].scatter(all_pts1[:, 0], all_pts1[:, 1], s=8, c="red", label="ORB (before match)")
+    ax[1].scatter(all_pts2[:, 0], all_pts2[:, 1], s=8, c="red")
+
+    ax[0].scatter(matched_pts1[:, 0], matched_pts1[:, 1], s=20, c="blue", label="After match")
+    ax[1].scatter(matched_pts2[:, 0], matched_pts2[:, 1], s=20, c="blue")
+
+    ax[0].legend(loc="lower right")
+
+    fig.suptitle("Two Frames + ESM + GT (last frame)")
+    fig.text(
+        0.01, 0.01,
+        f"ESM ([deg]: yaw={az:.3f}, pitch={pitch:.3f}, roll={roll:.3f}\n"
+        f"GT  [deg]: yaw={gt_yaw:.3f}, pitch={gt_pitch:.3f}, roll={gt_roll:.3f}\n",
+        family="monospace",
+        fontsize=9,
+        va="bottom"
+    )
+    plt.tight_layout()
+    plt.show()
+
+
+
+
+
+if __name__ == '__main__':
+    # run_Silmulator()
+    run_RealPhoneCamera()
