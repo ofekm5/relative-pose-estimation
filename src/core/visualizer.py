@@ -27,14 +27,17 @@ class Visualizer:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
 
-    def plot_3d_trajectory(self, gt_trajectory, evaluation_results,
+    def plot_3d_trajectory(self, gt_trajectory_full, gt_trajectory_filtered,
+                          gt_orientations_filtered, evaluation_results,
                           arrow_scale=0.3, step=15):
         """
         Create 3D interactive plot of ground truth and estimated trajectories.
 
         Args:
-            gt_trajectory: Ground truth positions array (N, 3) with columns [x, y, z]
-            evaluation_results: Dict from PoseEvaluator with GT and EST angles
+            gt_trajectory_full: Full ground truth positions (all frames) for path line
+            gt_trajectory_filtered: Filtered GT positions (at step interval) for arrows
+            gt_orientations_filtered: Filtered GT orientations (roll, pitch, yaw) for arrows
+            evaluation_results: Dict from PoseEvaluator with EST angles
             arrow_scale: Scale factor for orientation arrows
             step: Frame step interval for labeling
 
@@ -42,27 +45,26 @@ class Visualizer:
             str: Path to saved HTML file
         """
         # Extract data
-        gt_positions = gt_trajectory
-        gt_roll = evaluation_results['gt_roll']
-        gt_pitch = evaluation_results['gt_pitch']
-        gt_yaw = evaluation_results['gt_yaw']
+        gt_positions_full = gt_trajectory_full  # All frames for path
+        gt_positions_filtered = gt_trajectory_filtered  # Step-filtered for arrows
         est_roll = evaluation_results['est_roll']
         est_pitch = evaluation_results['est_pitch']
         est_yaw = evaluation_results['est_yaw']
-        frames = evaluation_results['frames']
 
         # Build orientation vectors
         dirs_gt = []
         dirs_est = []
         labels = []
 
-        # Build GT directions for all frames
-        for i in range(len(gt_roll)):
-            d_gt = self._rpy_to_direction(gt_roll[i], gt_pitch[i], gt_yaw[i])
+        # Build GT directions from actual filtered ground truth orientations
+        # gt_orientations_filtered has shape (N, 3) with columns [roll, pitch, yaw]
+        for i in range(len(gt_orientations_filtered)):
+            roll, pitch, yaw = gt_orientations_filtered[i]
+            d_gt = self._rpy_to_direction(roll, pitch, yaw)
             dirs_gt.append(d_gt * arrow_scale)
 
-            start_frame = frames[i] if i < len(frames) else 0
-            labels.append(f"{start_frame}-{start_frame + step}")
+            frame_idx = i * step
+            labels.append(f"{frame_idx}-{frame_idx + step}")
 
         dirs_gt = np.array(dirs_gt)
 
@@ -81,14 +83,14 @@ class Visualizer:
         COLOR_GT = "red"
         COLOR_EST = "blue"
 
-        # GT trajectory path
-        # Create frame indices for hover tooltips
-        all_frames = np.arange(0, len(gt_positions) * step, step)[:len(gt_positions)]
+        # GT trajectory path - use full trajectory for dense visualization
+        # Create frame indices for hover tooltips (all frames)
+        all_frames = np.arange(0, len(gt_positions_full))
 
         fig.add_trace(go.Scatter3d(
-            x=gt_positions[:, 0],
-            y=gt_positions[:, 1],
-            z=gt_positions[:, 2],
+            x=gt_positions_full[:, 0],
+            y=gt_positions_full[:, 1],
+            z=gt_positions_full[:, 2],
             mode="lines",
             line=dict(width=5, color=COLOR_GT),
             name="GT path",
@@ -107,11 +109,11 @@ class Visualizer:
                 font=dict(color="white")
             )
 
-            for i in range(len(gt_positions)):
+            for i in range(len(gt_positions_filtered)):
                 if i >= len(dirs):
                     break
 
-                x0, y0, z0 = gt_positions[i]
+                x0, y0, z0 = gt_positions_filtered[i]
                 dx, dy, dz = dirs[i]
                 label = labels[i] if i < len(labels) else f"frame {i}"
 

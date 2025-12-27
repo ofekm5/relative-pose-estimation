@@ -149,9 +149,13 @@ class PoseEstimationPipeline:
         # 5. Create visualizations
         if create_plot:
             print(f"[INFO] Creating 3D trajectory plot...")
-            gt_trajectory = self.gt_loader.get_trajectory(step=step)
+            gt_trajectory_full = self.gt_loader.get_trajectory(step=1)  # All frames for path
+            gt_trajectory_filtered = self.gt_loader.get_trajectory(step=step)  # Step-filtered for arrows
+            gt_orientations_filtered = self.gt_loader.get_orientations(step=step)  # GT orientations for arrows
             self.visualizer.plot_3d_trajectory(
-                gt_trajectory=gt_trajectory,
+                gt_trajectory_full=gt_trajectory_full,
+                gt_trajectory_filtered=gt_trajectory_filtered,
+                gt_orientations_filtered=gt_orientations_filtered,
                 evaluation_results=evaluation_results,
                 step=step
             )
