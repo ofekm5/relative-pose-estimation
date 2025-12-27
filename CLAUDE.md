@@ -409,6 +409,13 @@ src/
     plot_trajectory.py     # Standalone trajectory viz
     plot_vectors.py        # Standalone vector viz
 
+orr-src/                   # Reference implementation (for validation)
+  pose_matcher_full.py     # Complete pose matcher with VP refinement
+  matcher.py               # BFMatcher with crossCheck (no Lowe's ratio test)
+  feature_extractor.py     # ORB/SIFT feature extraction
+  pose_orb_lsd_calibrated.py  # Standalone VP implementation
+  plots_graths.py          # Visualization script
+
 data/                      # Input data
   camera_poses.txt         # Ground truth poses
   images/                  # PNG frames (000000.png, ...)
@@ -425,6 +432,16 @@ USAGE.md                   # Setup and usage guide
 CLAUDE.md                  # AI assistant guidance
 README.md                  # Project overview
 ```
+
+### Reference Implementation (orr-src)
+
+The `orr-src/` directory contains an alternative implementation used as a reference for validation and optimization discovery. Key characteristics:
+
+- **Same core algorithm**: ORB features + Essential Matrix + RecoverPose + VP refinement
+- **Matching approach**: BFMatcher with `crossCheck=True` (NOT Lowe's ratio test)
+- **VP refinement**: Identical implementation with same reliability gates (vp_acc_min=8e5, vp_vp2_min=8e3)
+- **Parameters**: nfeatures=4000, max_matches=500
+- **Purpose**: Used to validate our implementation correctness (results now match exactly: 0.00° difference)
 
 ## Known Limitations
 
