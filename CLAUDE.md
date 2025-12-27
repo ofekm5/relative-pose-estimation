@@ -2,16 +2,53 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Before major changes
-1. Use a planner, provide step-by-step descriptions
-2. Make small changes each step
-3. Ask questions if data missing or if there are unclear instructions
+# MANDATORY BEHAVIORAL REQUIREMENTS
+
+## CRITICAL: Workflow Guidelines - NO EXCEPTIONS
+
+**YOU MUST follow these rules before EVERY response without deviation:**
+
+1. **Plan incrementally** - ALWAYS break complex tasks into small, trackable steps. NO monolithic approaches.
+2. **Ask for clarification** - NEVER assume or guess missing requirements. STOP and ask if anything is unclear.
+3. **Read selectively** - ONLY read explicitly needed files. NO broad directory scans or exploratory reading.
+4. **Summarize concisely** - MAXIMUM 2-3 key findings and next steps. NO verbose explanations.
+
+**VIOLATION OF THESE RULES IS UNACCEPTABLE.** If you find yourself about to violate these guidelines, STOP immediately and reconsider your approach.
+
+## ABSOLUTE Response Style Requirements
+
+**Default format for non-code answers (STRICTLY ENFORCED):**
+- HARD LIMIT: 2-3 paragraphs maximum
+- NEVER repeat previously established context
+- ONLY provide actionable information
+- NO unnecessary elaboration or preambles
+
+**Code changes (MANDATORY):**
+- Show ACTUAL file changes with diffs - descriptions are insufficient
+- Explain rationale briefly (1-2 sentences max)
+- Test ALL changes before claiming task completion
+- NO untested code submissions
+
+## NON-NEGOTIABLE Restrictions
+
+**These restrictions override ANY other considerations, including helpfulness:**
+
+- ❌ **NEVER create README files** unless user explicitly requests "create a README"
+- ❌ **NEVER create documentation files** without explicit user request
+- ✅ **ALWAYS prefer editing existing files** over creating new ones
+- ✅ **PR titles/descriptions MUST be clear and concise** - no flowery language
+
+**If you're tempted to violate these restrictions "because it would be helpful," STOP. These are non-negotiable requirements, not suggestions.**
+
+## Enforcement Notice
+
+These guidelines are **MANDATORY REQUIREMENTS**, not optional best practices. Any justification like "not always relevant" or "it would be more helpful to..." is a violation. When in conflict between these rules and your default behaviors, **THESE RULES WIN**.
 
 ## Project Overview
 
-This is a **6-DoF (6 Degrees of Freedom) Relative Pose Estimation** system that uses classical computer vision techniques to estimate camera motion between two consecutive images. It uses **ORB features, feature matching, Essential Matrix estimation, and RecoverPose** to compute translation (Tx, Ty, Tz) and rotation (Roll, Pitch, Yaw) - no training or datasets required.
+This is a **6-DoF (6 Degrees of Freedom) Relative Pose Estimation** system that uses classical computer vision techniques to estimate camera motion between two consecutive images. It uses **ORB features, feature matching, Essential Matrix estimation, and RecoverPose** to compute translation (Tx, Ty, Tz) and rotation (Roll, Pitch, Yaw) - no training or datasets required. **Optional VP (Vanishing Point) refinement** using LSD line detection can improve rotation estimation when applicable.
 
-**Pipeline:** Image Loading → ORB Feature Extraction → Feature Matching → Essential Matrix → RecoverPose → 6-DoF Output (R, t, roll, pitch, yaw)
+**Pipeline:** Image Loading → ORB Feature Extraction → Feature Matching → Essential Matrix → RecoverPose → (Optional VP Refinement) → 6-DoF Output (R, t, roll, pitch, yaw)
 
 **Language:** Python 3 with OpenCV (C++ architecture prepared but not yet implemented)
 
@@ -97,11 +134,11 @@ src/
 ### Key Components
 
 **Core Modules:**
-- `pipeline.py` - Main orchestrator coordinating all components
+- `pipeline.py` - Main orchestrator coordinating all components (configured with nfeatures=4000, use_vp_refinement=True)
 - `camera_calibration.py` - Computes camera intrinsic matrix K from base parameters
 - `ground_truth_loader.py` - Loads and provides access to GT poses
-- `pose_estimator.py` - Estimates relative pose from image pairs (features + matching merged)
-- `batch_processor.py` - Processes sequences of frames, accumulates trajectory
+- `pose_estimator.py` - Estimates relative pose from image pairs (ORB/SIFT features + matching + optional VP refinement using LSD line detection)
+- `batch_processor.py` - Processes sequences of frames, accumulates trajectory (composes rotations: R_new = R_prev @ R_rel)
 - `pose_evaluator.py` - Compares estimated vs GT poses, computes error metrics
 - `visualizer.py` - Creates 3D plots and annotated videos
 
@@ -123,8 +160,8 @@ src/
 2. PoseEstimationPipeline.run(step=15)
    ├── BatchProcessor.process_at_interval(step)
    │   ├── Load image pairs
-   │   ├── PoseEstimator.estimate(img1, img2) → (R, t)
-   │   ├── Transform to world frame using GT of first frame
+   │   ├── PoseEstimator.estimate(img1, img2, R_prev) → (R, t) [with optional VP refinement]
+   │   ├── Transform to world frame: R_new_world = R_prev_world @ R_rel
    │   └── Accumulate trajectory
    ├── PoseEvaluator.evaluate_sequence(results)
    │   ├── Compare EST vs GT angles
@@ -237,10 +274,11 @@ else:
 ```
 
 ### Feature Matching Parameters
-- **ORB nfeatures:** 2000 keypoints maximum
+- **ORB nfeatures:** 4000 keypoints maximum (increased for improved matching)
 - **max_matches:** 500 best matches used for pose estimation
 - **RANSAC threshold:** 1.0 pixel
 - **RANSAC confidence:** 0.999
+- **VP refinement:** Optional LSD-based refinement (enabled by default but applies only when reliability gates pass: vp_acc_min=8e5, vp_vp2_min=8e3)
 
 ### Error Metrics
 Available in `src.utils.geometry`:
@@ -294,7 +332,12 @@ from src.utils.image_loader import load_image_pair
 # Setup
 calibration = CameraCalibration()
 K = calibration.get_matrix(1920, 1080)
-estimator = PoseEstimator(camera_matrix=K, feature_method="ORB")
+estimator = PoseEstimator(
+    camera_matrix=K,
+    feature_method="ORB",
+    nfeatures=4000,
+    use_vp_refinement=True  # Optional VP refinement (applies when reliability gates pass)
+)
 
 # Estimate pose
 img1, img2 = load_image_pair("data/images/000000.png", "data/images/000015.png")
@@ -389,6 +432,8 @@ README.md                  # Project overview
 - **Rotation-translation coupling:** Large rotations may affect translation direction accuracy
 - **Texture dependence:** Low-texture scenes produce fewer reliable matches
 - **Motion assumptions:** Works best for small to moderate inter-frame motion
+- **VP refinement applicability:** VP refinement using LSD lines is enabled but only applies when strict reliability gates are met (vp_acc_min=8e5, vp_vp2_min=8e3). Many scenes (including simulator data) do not meet these thresholds, so refinement is rarely applied in practice.
+- **Rotation composition:** CRITICAL - batch_processor.py composes rotations as R_new = R_prev @ R_rel (NOT R_prev @ R_rel.T). Incorrect composition causes yaw error accumulation over trajectories.
 - **C++ implementation:** Architecture prepared (CMakeLists.txt, Dockerfile) but Python is the current production code
 
 ## Git Workflow
