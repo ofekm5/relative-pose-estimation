@@ -7,10 +7,10 @@ import cv2
 # =========================
 # EDIT ONLY THESE
 # =========================
-VIDEO_PATH = "/home/orr/university_projects/qr_position/vidoes/forward_with_stuff.mp4"
-OUT_DIR = "/home/orr/university_projects/qr_position/forward_with_stuff"
+VIDEO_PATH = "/home/orr/university_projects/relative-pose-estimation/phone_camera/forward_with_stuff/forward_with_stuff.mp4"
+OUT_DIR = "/home/orr/university_projects/relative-pose-estimation/phone_camera/forward_with_stuff/all_images"
 SAVE_EVERY_N = 1          # 1 = כל פריים, 2 = כל פריים שני, וכו'
-JPG_QUALITY = 95          # 0-100
+JPG_QUALITY = 100          # 0-100
 MAX_FRAMES = 0            # 0 = בלי הגבלה, אחרת יעצור אחרי N פריימים שנשמרו
 # =========================
 
@@ -34,7 +34,7 @@ def main():
             break
 
         if (read_idx % SAVE_EVERY_N) == 0:
-            out_path = os.path.join(OUT_DIR, f"frame_{read_idx:06d}.jpg")
+            out_path = os.path.join(OUT_DIR, f"{read_idx:06d}.png")
             ok2 = cv2.imwrite(out_path, frame, [int(cv2.IMWRITE_JPEG_QUALITY), int(JPG_QUALITY)])
             if not ok2:
                 print(f"[WARN] Failed to write: {out_path}")

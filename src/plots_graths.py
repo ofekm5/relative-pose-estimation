@@ -374,8 +374,8 @@ def build_K_Phone(image):
 
 
 def _build_phone():
-    base_dir = "../phone_camera/forward_with_stuff"
-    gt_path = base_dir + "/forward_with_stuff.csv"
+    base_dir = "../phone_camera/from_right_to_left"
+    gt_path = base_dir + "/tag0_pose_filtered.csv"
 
     frame1 = 1
     frame2 = 2

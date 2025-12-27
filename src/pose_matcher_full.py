@@ -561,7 +561,16 @@ def build_K_Phone(image):
 
 
 
+def build_good_K(image):
+    h, w = image.shape[:2]
 
+    fx = fy = 500
+    cx = w / 2
+    cy = h / 2
+    K_test = np.array([[fx, 0, cx],
+                       [0, fy, cy],
+                       [0, 0, 1]])
+    return K_test
 
 def run_simulator():
     base_dir = "../silmulator_data/simple_movement"
@@ -598,9 +607,10 @@ def run_simulator():
     # כל נקודות ORB (לפני match)
     all_pts1 = np.array([kp.pt for kp in kp1])
     all_pts2 = np.array([kp.pt for kp in kp2])
-
     matched_pts1 = np.array([kp1[m.queryIdx].pt for m in matches])
     matched_pts2 = np.array([kp2[m.trainIdx].pt for m in matches])
+    parallax = np.linalg.norm(matched_pts1 - matched_pts2, axis=1)
+    print(np.mean(parallax), np.std(parallax))
     az, pitch, roll = matcher.match(img1, img2, prev_frame_index=frame1)
 
     print("est azimuth:", az)
@@ -640,11 +650,11 @@ def run_simulator():
     plt.show()
 
 
-def run_RealPhoneCamera():
-    base_dir = "../phone_camera/forward_with_stuff"
-    gt_path = base_dir + "/forward_with_stuff.csv"
+def run_RealPhoneCameraRightToLeft():
+    base_dir = "../phone_camera/from_right_to_left"
+    gt_path = base_dir + "/tag0_pose_filtered.csv"
     frame1 = 0
-    frame2 = 1
+    frame2 = 25
     img1_path = Path(base_dir) / "images" / f"{frame1:06d}.png"
     img2_path = Path(base_dir) / "images" / f"{frame2:06d}.png"
 
@@ -674,8 +684,89 @@ def run_RealPhoneCamera():
     all_pts1 = np.array([kp.pt for kp in kp1])
     all_pts2 = np.array([kp.pt for kp in kp2])
 
+
     matched_pts1 = np.array([kp1[m.queryIdx].pt for m in matches])
     matched_pts2 = np.array([kp2[m.trainIdx].pt for m in matches])
+    parallax = np.linalg.norm(matched_pts1 - matched_pts2, axis=1)
+    print(np.mean(parallax), np.std(parallax))
+    az, pitch, roll = matcher.match(img1, img2, prev_frame_index=frame1)
+
+    print("est azimuth:", az)
+    print("est pitch  :", pitch)
+    print("est roll   :", roll)
+    gt_row = matcher.df_gt[matcher.df_gt["frame"] == frame2].iloc[0]
+    gt_yaw = float(gt_row["yaw"])
+    gt_pitch = float(gt_row["pitch"])
+    gt_roll = float(gt_row["roll"])
+
+    fig, ax = plt.subplots(1, 2, figsize=(14, 6))
+    ax[0].imshow(img1, cmap="gray");
+    ax[0].set_title(f"Frame {frame1}");
+    ax[0].axis("off")
+    ax[1].imshow(img2, cmap="gray");
+    ax[1].set_title(f"Frame {frame2}");
+    ax[1].axis("off")
+
+    ax[0].scatter(all_pts1[:, 0], all_pts1[:, 1], s=8, c="red", label="ORB (before match)")
+    ax[1].scatter(all_pts2[:, 0], all_pts2[:, 1], s=8, c="red")
+
+    ax[0].scatter(matched_pts1[:, 0], matched_pts1[:, 1], s=20, c="blue", label="After match")
+    ax[1].scatter(matched_pts2[:, 0], matched_pts2[:, 1], s=20, c="blue")
+
+    ax[0].legend(loc="lower right")
+
+    fig.suptitle("Two Frames + ESM + GT (last frame)")
+    fig.text(
+        0.01, 0.01,
+        f"ESM ([deg]: yaw={az:.3f}, pitch={pitch:.3f}, roll={roll:.3f}\n"
+        f"GT  [deg]: yaw={gt_yaw:.3f}, pitch={gt_pitch:.3f}, roll={gt_roll:.3f}\n",
+        family="monospace",
+        fontsize=9,
+        va="bottom"
+    )
+    plt.tight_layout()
+    plt.show()
+
+
+def run_RealPhoneCameraForward():
+    base_dir = "../phone_camera/forward_with_stuff"
+    gt_path = base_dir + "/tag0_pose_filtered.csv"
+    frame1 = 0
+    frame2 = 20
+    img1_path = Path(base_dir) / "images" / f"{frame1:06d}.png"
+    img2_path = Path(base_dir) / "images" / f"{frame2:06d}.png"
+
+    img1, img2 = load_image_pair(str(img1_path), str(img2_path), to_gray=True)
+    k = build_good_K(img1)
+    matcher = PoseMatcher(
+        base_dir=base_dir,
+        gt_path=gt_path,
+        K=k,
+        source="phone",
+        feature_method="ORB",
+        norm_type="Hamming",
+        max_matches=500,
+    )
+
+
+
+    orb = cv2.ORB_create(nfeatures=1500)
+    kp1, des1 = orb.detectAndCompute(img1, None)
+    kp2, des2 = orb.detectAndCompute(img2, None)
+
+    bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+    matches = bf.match(des1, des2)
+    matches = sorted(matches, key=lambda m: m.distance)[:200]
+
+    # כל נקודות ORB (לפני match)
+    all_pts1 = np.array([kp.pt for kp in kp1])
+    all_pts2 = np.array([kp.pt for kp in kp2])
+
+
+    matched_pts1 = np.array([kp1[m.queryIdx].pt for m in matches])
+    matched_pts2 = np.array([kp2[m.trainIdx].pt for m in matches])
+    parallax = np.linalg.norm(matched_pts1 - matched_pts2, axis=1)
+    print(np.mean(parallax), np.std(parallax))
     az, pitch, roll = matcher.match(img1, img2, prev_frame_index=frame1)
 
     print("est azimuth:", az)
@@ -719,5 +810,7 @@ def run_RealPhoneCamera():
 
 
 if __name__ == '__main__':
-    #run_simulator()
-    run_RealPhoneCamera()
+
+    # run_simulator()
+    run_RealPhoneCameraForward()
+    # run_RealPhoneCameraRightToLeft()

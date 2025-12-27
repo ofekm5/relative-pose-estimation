@@ -17,9 +17,9 @@ import shutil
 # ==========================
 # 1) EDIT ONLY THESE
 # ==========================
-FRAMES_DIR = "//home/orr/university_projects/qr_position/forward_with_stuff"
-OUT_DIR    = "/home/orr/university_projects/qr_position/forward_with_stuff_analysis"
-K_NPZ_PATH = "/home/orr/university_projects/relative-pose-estimation/src/calibration_filtered.npz"
+FRAMES_DIR = "/home/orr/university_projects/relative-pose-estimation/phone_camera/forward_with_stuff/all_images"
+OUT_DIR    = "/home/orr/university_projects/relative-pose-estimation/phone_camera/forward_with_stuff"
+K_NPZ_PATH = "/home/orr/university_projects/relative-pose-estimation/phone_camera/camera_calibration_code/calibration_filtered.npz"
 
 # IMPORTANT: the resolution that the calibration K belongs to (before scaling)
 CALIB_W, CALIB_H = 2000, 1126   # <-- change if your calibration images were different
@@ -27,7 +27,7 @@ CALIB_W, CALIB_H = 2000, 1126   # <-- change if your calibration images were dif
 TAG_ID = 0
 TAG_SIZE_M = 0.20               # 200mm
 ERR_MAX_PX = 0.1
-FILTERED_FRAMES_DIR = os.path.join(OUT_DIR, "filtered_frames")
+FILTERED_FRAMES_DIR = os.path.join(OUT_DIR, "images")
 
 # Recommended for planar square: IPPE_SQUARE
 PNP_FLAG = cv2.SOLVEPNP_ITERATIVE # or cv2.SOLVEPNP_ITERATIVE
@@ -63,21 +63,28 @@ def wrap180(angle_deg: float) -> float:
     return (angle_deg + 180.0) % 360.0 - 180.0
 
 
-def rotmat_to_az_pitch_roll_deg_camera(R: np.ndarray) -> Tuple[float, float, float]:
-    # ZYX (yaw-pitch-roll)
-    sy = math.sqrt(R[0, 0]**2 + R[1, 0]**2)
-    singular = sy < 1e-6
+def rotmat_to_ypr_zyx_deg(R):
+    """
+    Yaw-Pitch-Roll from rotation matrix using ZYX (intrinsic) convention:
+      R = Rz(yaw) * Ry(pitch) * Rx(roll)
+    Returns degrees.
+    """
+    # pitch = asin(-R[2,0]) with clamping
+    v = -R[2, 0]
+    v = max(-1.0, min(1.0, float(v)))
+    pitch = math.asin(v)
 
-    if not singular:
-        roll  = math.atan2(R[2, 1], R[2, 2])
-        pitch = math.atan2(-R[2, 0], sy)
-        yaw   = math.atan2(R[1, 0], R[0, 0])
+    # Check for gimbal singularity
+    if abs(math.cos(pitch)) < 1e-8:
+        # Gimbal lock: yaw and roll are coupled
+        # Pick yaw=atan2(-R[0,1], R[1,1]) and roll=0 as a stable choice
+        yaw  = math.atan2(-R[0, 1], R[1, 1])
+        roll = 0.0
     else:
-        roll  = math.atan2(-R[1, 2], R[1, 1])
-        pitch = math.atan2(-R[2, 0], sy)
-        yaw   = 0.0
+        yaw  = math.atan2(R[1, 0], R[0, 0])
+        roll = math.atan2(R[2, 1], R[2, 2])
 
-    return (math.degrees(yaw), math.degrees(pitch), math.degrees(roll))
+    return np.degrees([yaw, pitch, roll])  # [yaw, pitch, roll]
 
 
 def make_tag_objp(tag_size_m: float) -> np.ndarray:
@@ -133,10 +140,6 @@ def detect_tag_pose(img_bgr, detector, K, dist, objp, target_id: int, pnp_flag: 
     if not ok:
         return None
 
-    # keep tag in front of camera
-    if float(tvec[2, 0]) < 0.0:
-        rvec = -rvec
-        tvec = -tvec
 
     proj, _ = cv2.projectPoints(objp, rvec, tvec, K, dist)
     proj = proj.reshape(-1, 2)
@@ -157,6 +160,18 @@ def plot_series(out_png: str, xvals: np.ndarray, series: List[Tuple[str, np.ndar
     plt.savefig(out_png, dpi=150)
     plt.close()
 
+def az_pitch_from_xyz_deg(x: float, y: float, z: float):
+    """
+    OpenCV camera frame:
+      X right, Y down, Z forward
+    Uses only translation (XYZ) -> viewing direction angles.
+    Returns:
+      azimuth: left/right in XZ plane
+      pitch:   up/down (positive if target is below camera)
+    """
+    az = math.degrees(math.atan2(x, z))
+    pitch = math.degrees(math.atan2(-y, math.sqrt(x*x + z*z)))
+    return az, pitch,0
 
 def main():
     files = list_images(FRAMES_DIR)
@@ -193,7 +208,7 @@ def main():
 
     rows: List[Row] = []
     missed = 0
-
+    R_ct0 = None  # reference rotation (first frame)
     for idx, fname in enumerate(files):
         img = cv2.imread(fname)
         if img is None:
@@ -209,8 +224,8 @@ def main():
         R_tc, _ = cv2.Rodrigues(rvec)
 
         x, y, z = tvec.flatten().astype(float)
-        az, pitch, roll = rotmat_to_az_pitch_roll_deg_camera(R_tc)
-
+        # az, pitch, roll = rotmat_to_ypr_zyx_deg(R_tc)
+        az, pitch, roll = az_pitch_from_xyz_deg(x, y, z)
         bearing = math.degrees(math.atan2(x, z))
         elevation = math.degrees(math.atan2(-y, z))
 
@@ -240,8 +255,20 @@ def main():
                 pass
 
         # Copy filtered frames
-        for r in rows_good:
-            dst = os.path.join(FILTERED_FRAMES_DIR, r.filename)
+        os.makedirs(FILTERED_FRAMES_DIR, exist_ok=True)
+
+        # לנקות את התיקייה פעם אחת לפני ההעתקה
+        for old in glob.glob(os.path.join(FILTERED_FRAMES_DIR, "*")):
+            try:
+                os.remove(old)
+            except:
+                pass
+
+        # להעתיק ולמספר מחדש מ-0
+        for new_idx, r in enumerate(rows_good):
+            ext = os.path.splitext(r.filename)[1].lower()  # .png / .jpg ...
+            new_name = f"{new_idx:06d}{ext}"  # 000000.png
+            dst = os.path.join(FILTERED_FRAMES_DIR, new_name)
             shutil.copy2(r.filepath, dst)
 
         print(f"[DONE] Copied {len(rows_good)} filtered frames to: {FILTERED_FRAMES_DIR}")
@@ -250,7 +277,7 @@ def main():
     # Save CSV
     out_csv_all = os.path.join(OUT_DIR, "tag0_pose_all.csv")
     with open(out_csv_all, "w", encoding="utf-8") as f:
-        f.write("frame_idx,filename,x,y,z,az,pitch,roll,bearing,elevation,reproj_err_px\n")
+        f.write("frame,filename,x,y,z,az,pitch,roll,bearing,elevation,reproj_err_px\n")
         for r in rows:
             f.write(f"{r.frame_idx},{r.filename},"
                     f"{r.x:.6f},{r.y:.6f},{r.z:.6f},"
@@ -261,13 +288,15 @@ def main():
     # Save CSV (FILTERED)
     out_csv = os.path.join(OUT_DIR, "tag0_pose_filtered.csv")
     with open(out_csv, "w", encoding="utf-8") as f:
-        f.write("frame_idx,filename,x,y,z,az,pitch,roll,bearing,elevation,reproj_err_px\n")
-        for r in rows_good:
-            f.write(f"{r.frame_idx},{r.filename},"
-                    f"{r.x:.6f},{r.y:.6f},{r.z:.6f},"
-                    f"{r.az:.3f},{r.pitch:.3f},{r.roll:.3f},"
-                    f"{r.bearing:.3f},{r.elevation:.3f},"
-                    f"{r.reproj_err:.3f}\n")
+        f.write("frame,filename,x,y,z,yaw,pitch,roll,bearing,elevation,reproj_err_px\n")
+        for new_idx, r in enumerate(rows_good):
+            f.write(
+                f"{new_idx},{r.filename},"
+                f"{r.x:.6f},{r.y:.6f},{r.z:.6f},"
+                f"{r.az:.3f},{r.pitch:.3f},{r.roll:.3f},"
+                f"{r.bearing:.3f},{r.elevation:.3f},"
+                f"{r.reproj_err:.3f}\n"
+            )
 
     print(f"[DONE] CSV ALL:      {out_csv_all}")
     print(f"[DONE] CSV FILTERED: {out_csv}")
