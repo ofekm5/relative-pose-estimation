@@ -5,13 +5,16 @@ from pathlib import Path
 from image_loader import load_image_pair
 from pose_matcher_full import PoseMatcher
 import cv2
-
+import os
 
 class PosePlotter:
 
     def __init__(
         self,
         base_path,
+        gt_path,
+        K,
+        source,
         step=15,
         arrow_scale=0.3,
 
@@ -28,8 +31,9 @@ class PosePlotter:
         self.use_lines = bool(use_lines)
         self.line_dilate_px = int(line_dilate_px)
         self.min_points_after_line_filter = int(min_points_after_line_filter)
-
-        self.gt_path = self.base_path / "camera_poses.txt"
+        self.K = K
+        self.source = source
+        self.gt_path = gt_path
         self.images_dir = self.base_path / "images"
 
         self.df = None
@@ -80,13 +84,18 @@ class PosePlotter:
     # Load GT Data
     # --------------------------------------------------------
     def load_gt(self):
-        self.df = pd.read_csv(self.gt_path, delim_whitespace=True)
+        if self.source == "simulator":
+            self.df = pd.read_csv(self.gt_path, sep=r"\s+")
+        else:
+            self.df = pd.read_csv(self.gt_path)
         self.df_sub = self.df[self.df["frame"] % self.step == 0]
 
         # ---- CHANGED: PoseMatcher with line-assisted filtering ----
         self.matcher = PoseMatcher(
             base_dir=str(self.base_path),
             gt_path=str(self.gt_path),
+            K=self.K,
+            source=self.source,
             feature_method="ORB",
             norm_type="Hamming",
             max_matches=500,
@@ -310,16 +319,78 @@ class PosePlotter:
         writer.release()
         print(f"[INFO] Video saved to: {video_path}")
 
+def build_K_simulator(image):
+    """
+    Build intrinsic matrix K from one sample image,
+    using the same scaling logic you used before.
+    """
+    h, w = image.shape[:2]
 
-if __name__ == '__main__':
+    scale_x = w / 960.0
+    scale_y = h / 720.0
 
-    # for data silmulator
-    base_path = "/home/orr/university_projects/relative-pose-estimation/silmulator_data/simple_movement"
+    fx = 924.82939686 * scale_x
+    fy = 920.4766382 * scale_y
+    cx = 468.24930789 * scale_x
+    cy = 353.65863024 * scale_y
+
+    K = np.array([
+            [fx, 0,   cx],
+            [0,  fy,  cy],
+            [0,  0,   1]
+        ])
+
+    return K
+
+
+CALIB_W, CALIB_H = 2000, 1126  # resolution used during calibration
+
+CALIB_NPZ = "../phone_camera/camera_calibration_code/calibration_filtered.npz"
+def build_K_Phone(image):
+    """
+    Build intrinsic matrix K from one sample image,
+    using the same scaling logic you used before.
+    """
+    if not os.path.isfile(CALIB_NPZ):
+        raise RuntimeError(f"Calibration file not found: {CALIB_NPZ}")
+    data = np.load(CALIB_NPZ)
+    if "K" not in data.files:
+        raise RuntimeError(f"npz must contain 'K'. Found: {data.files}")
+    K = data["K"].astype(np.float64)
+
+    h, w = image.shape[:2]
+    # SCALE THE K
+    sx = w / float(CALIB_W)
+    sy = h / float(CALIB_H)
+    K2 = K.copy().astype(np.float64)
+    K2[0, 0] *= sx
+    K2[0, 2] *= sx
+    K2[1, 1] *= sy
+    K2[1, 2] *= sy
+
+    return K2
+
+
+
+
+def _build_phone():
+    base_dir = "/home/orr/university_projects/relative-pose-estimation/phone_camera/forward_with_stuff"
+    gt_path = base_dir + "/forward_with_stuff.csv"
+
+    frame1 = 1
+    frame2 = 2
+    img1_path = Path(base_dir) / "images" / f"{frame1:06d}.png"
+    img2_path = Path(base_dir) / "images" / f"{frame2:06d}.png"
+
+    img1, img2 = load_image_pair(str(img1_path), str(img2_path), to_gray=True)
+    k = build_K_Phone(img1)
     plotter = PosePlotter(
-        base_path,
-        step=15,
+        base_dir,
+        gt_path,
+        K=k,
+        source="phone",
+        step=1,
         arrow_scale=0.3,
-
         # NEW: turn on/off here
         use_lines=True,
         line_dilate_px=2,
@@ -334,3 +405,44 @@ if __name__ == '__main__':
 
     # video
     plotter.make_video(output_file="yaw_debug.mp4", fps=5)
+
+
+
+
+
+def _build_simulator():
+    base_dir = "/home/orr/university_projects/relative-pose-estimation/silmulator_data/simple_movement"
+    gt_path = base_dir + "/camera_poses.txt"
+
+    frame1 = 0
+    frame2 = 1
+    img1_path = Path(base_dir) / "images" / f"{frame1:06d}.png"
+    img2_path = Path(base_dir) / "images" / f"{frame2:06d}.png"
+
+    img1, img2 = load_image_pair(str(img1_path), str(img2_path), to_gray=True)
+    k = build_K_simulator(img1)
+    plotter = PosePlotter(
+        base_dir,
+        gt_path,
+        K=k,
+        source="simulator",
+        step=15,
+        arrow_scale=0.3,
+        # NEW: turn on/off here
+        use_lines=True,
+        line_dilate_px=2,
+        min_points_after_line_filter=40,
+    )
+
+    # for phone simulator
+
+
+    # 3D plot
+    plotter.run()
+
+    # video
+    plotter.make_video(output_file="yaw_debug.mp4", fps=5)
+
+
+if __name__ == '__main__':
+    _build_phone()

@@ -508,7 +508,7 @@ class PoseMatcher:
 
 
 
-def build_K_Simulator(image):
+def build_K_simulator(image):
     """
     Build intrinsic matrix K from one sample image,
     using the same scaling logic you used before.
@@ -563,7 +563,7 @@ def build_K_Phone(image):
 
 
 
-def run_Silmulator():
+def run_simulator():
     base_dir = "/home/orr/university_projects/relative-pose-estimation/silmulator_data/simple_movement"
     gt_path = base_dir + "/camera_poses.txt"
 
@@ -573,7 +573,7 @@ def run_Silmulator():
     img2_path = Path(base_dir) / "images" / f"{frame2:06d}.png"
 
     img1, img2 = load_image_pair(str(img1_path), str(img2_path), to_gray=True)
-    k = build_K_Simulator(img1)
+    k = build_K_simulator(img1)
     matcher = PoseMatcher(
         base_dir=base_dir,
         gt_path=gt_path,
@@ -643,8 +643,8 @@ def run_Silmulator():
 def run_RealPhoneCamera():
     base_dir = "/home/orr/university_projects/relative-pose-estimation/phone_camera/forward_with_stuff"
     gt_path = base_dir + "/forward_with_stuff.csv"
-    frame1 = 10
-    frame2 = 12
+    frame1 = 0
+    frame2 = 1
     img1_path = Path(base_dir) / "images" / f"{frame1:06d}.png"
     img2_path = Path(base_dir) / "images" / f"{frame2:06d}.png"
 
@@ -719,5 +719,5 @@ def run_RealPhoneCamera():
 
 
 if __name__ == '__main__':
-    # run_Silmulator()
+    #run_simulator()
     run_RealPhoneCamera()
