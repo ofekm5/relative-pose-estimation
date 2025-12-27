@@ -564,7 +564,7 @@ def build_K_Phone(image):
 
 
 def run_simulator():
-    base_dir = "/home/orr/university_projects/relative-pose-estimation/silmulator_data/simple_movement"
+    base_dir = "../silmulator_data/simple_movement"
     gt_path = base_dir + "/camera_poses.txt"
 
     frame1 = 0
@@ -641,7 +641,7 @@ def run_simulator():
 
 
 def run_RealPhoneCamera():
-    base_dir = "/home/orr/university_projects/relative-pose-estimation/phone_camera/forward_with_stuff"
+    base_dir = "../phone_camera/forward_with_stuff"
     gt_path = base_dir + "/forward_with_stuff.csv"
     frame1 = 0
     frame2 = 1
