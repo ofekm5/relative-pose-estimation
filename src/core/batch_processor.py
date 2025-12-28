@@ -73,9 +73,6 @@ class BatchProcessor:
 
             img1, img2 = load_image_pair(str(img1_path), str(img2_path), to_gray=True)
 
-            # Estimate relative pose
-            R_rel, t_rel = self.pose_estimator.estimate(img1, img2)
-
             # Get ground truth orientation of first frame
             gt_pose1 = self.gt_loader.get_pose(frame1_idx)
             prev_roll = gt_pose1['roll']
@@ -85,10 +82,13 @@ class BatchProcessor:
             # Convert ground truth orientation to rotation matrix
             R_prev_world = euler_to_rotation_yup(prev_yaw, prev_pitch, prev_roll)
 
+            # Estimate relative pose (with VP refinement if enabled)
+            R_rel, t_rel = self.pose_estimator.estimate(img1, img2, R_prev=R_prev_world)
+
             # Compose to get world rotation of second frame
             # R_rel represents rotation from camera1 to camera2
-            # R_cam2 = R_cam1 @ R_rel^T
-            R_new_world = R_prev_world @ R_rel.T
+            # R_cam2 = R_cam1 @ R_rel
+            R_new_world = R_prev_world @ R_rel
 
             # Convert back to Euler angles
             yaw_est, pitch_est, roll_est = rotation_to_euler_yup(R_new_world)

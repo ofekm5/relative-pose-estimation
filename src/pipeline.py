@@ -11,6 +11,7 @@ from .core.batch_processor import BatchProcessor
 from .core.pose_evaluator import PoseEvaluator
 from .core.visualizer import Visualizer
 from .utils.image_loader import load_image
+import numpy as np
 
 
 class PoseEstimationPipeline:
@@ -22,8 +23,11 @@ class PoseEstimationPipeline:
 
     def __init__(self,
                  data_dir="data",
+                 images_dir=None,  # New: override images location
                  results_dir="results",
                  gt_filename="camera_poses.txt",
+                 camera_matrix=None,  # New: direct K matrix
+                 calibration_file=None,  # New: .npz file path
                  feature_method="ORB",
                  norm_type="Hamming",
                  max_matches=500):
@@ -31,15 +35,18 @@ class PoseEstimationPipeline:
         Initialize pose estimation pipeline.
 
         Args:
-            data_dir: Directory containing images/ and ground truth file (default: "data")
+            data_dir: Directory containing ground truth file (default: "data")
+            images_dir: Custom images directory (overrides data_dir/images)
             results_dir: Directory for output files (plots, videos, CSVs) (default: "results")
             gt_filename: Filename of ground truth poses file
+            camera_matrix: Direct 3x3 camera matrix K (overrides calibration_file)
+            calibration_file: Path to .npz calibration file with 'K' key
             feature_method: Feature detector method ('ORB' or 'SIFT')
             norm_type: Distance norm for matching ('Hamming' for ORB, 'L2' for SIFT)
             max_matches: Maximum number of matches to use for pose estimation
         """
         self.data_dir = Path(data_dir)
-        self.images_dir = self.data_dir / "images"
+        self.images_dir = Path(images_dir) if images_dir else self.data_dir / "images"
         self.gt_path = self.data_dir / gt_filename
         self.results_dir = Path(results_dir)
         self.results_dir.mkdir(exist_ok=True)
@@ -48,6 +55,8 @@ class PoseEstimationPipeline:
         self.feature_method = feature_method
         self.norm_type = norm_type
         self.max_matches = max_matches
+        self.camera_matrix = camera_matrix
+        self.calibration_file = calibration_file
 
         # Components (initialized in setup)
         self.camera_calibration = None
@@ -68,7 +77,7 @@ class PoseEstimationPipeline:
         self.gt_loader.load()
 
         # 2. Setup camera calibration
-        self.camera_calibration = CameraCalibration()
+        self.camera_calibration = CameraCalibration(camera_matrix=self.camera_matrix, calibration_file=self.calibration_file)
 
         # Get camera matrix from a sample image
         sample_frames = self.gt_loader.get_all_frames()
@@ -82,7 +91,9 @@ class PoseEstimationPipeline:
             camera_matrix=K,
             feature_method=self.feature_method,
             norm_type=self.norm_type,
-            max_matches=self.max_matches
+            max_matches=self.max_matches,
+            nfeatures=4000,
+            use_vp_refinement=True
         )
 
         # 4. Setup batch processor
@@ -107,7 +118,8 @@ class PoseEstimationPipeline:
         print(f"[INFO] Images directory: {self.images_dir}")
         print(f"[INFO] Ground truth: {self.gt_path}")
         print(f"[INFO] Results directory: {self.results_dir}")
-        print(f"[INFO] Feature method: {self.feature_method}")
+        print(f"[INFO] Feature method: {self.feature_method} (nfeatures=4000)")
+        print(f"[INFO] VP refinement: Enabled")
         print(f"[INFO] Camera matrix K computed from image size: {sample_img.shape}")
 
     def run(self, step=15, create_plot=True, create_video=False, video_fps=10):
@@ -235,37 +247,3 @@ class PoseEstimationPipeline:
             'gt_pose1': gt_pose1,
             'gt_pose2': gt_pose2
         }
-
-
-def main():
-    """
-    Example usage of the pipeline.
-    """
-    # Initialize pipeline
-    pipeline = PoseEstimationPipeline(
-        data_dir="data",
-        results_dir="results",
-        feature_method="ORB",
-        norm_type="Hamming",
-        max_matches=500
-    )
-
-    # Setup components
-    pipeline.setup()
-
-    # Run full pipeline
-    results = pipeline.run(
-        step=15,
-        create_plot=True,
-        create_video=True,
-        video_fps=5
-    )
-
-    print("\n[INFO] Pipeline results keys:", results.keys())
-
-    # Optionally test a single pair
-    # pipeline.run_single_pair(0, 15, show_debug=True)
-
-
-if __name__ == "__main__":
-    main()
