@@ -14,8 +14,19 @@ def main():
     #     max_matches=500
     # )
 
+    # Phone camera uses ZYX camera convention (from ArUco tags)
+    # Import ZYX geometry functions
+    import sys
+    sys.path.insert(0, 'src/utils')
+    from geometry_zyx import rotation_to_euler_zyx_camera
+
+    # Monkey-patch the geometry module to use ZYX
+    import src.utils.geometry as geom
+    geom.rotation_to_euler_yup = lambda R: rotation_to_euler_zyx_camera(R)
+
     pipeline = PoseEstimationPipeline(
         data_dir="phone-data",
+        gt_filename="camera_poses_zyx.txt",
         calibration_file="phone-data/calibration_scaled.npz",
         results_dir="results",
         feature_method="ORB",

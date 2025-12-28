@@ -51,3 +51,7 @@ env/
 ENV/
 refactor_code_old
 /myenv/
+/phone-data/images/
+/simulator-data/images/
+/orr-src/chess_calibration/
+*.npz
