@@ -53,7 +53,10 @@ class GroundTruthLoader:
         if self.df is None:
             raise RuntimeError("Ground truth not loaded. Call load() first.")
 
-        row = self.df[self.df["frame"] == frame_idx].iloc[0]
+        matches = self.df[self.df["frame"] == frame_idx]
+        if matches.empty:
+            raise KeyError(f"Frame {frame_idx} not found in ground truth data")
+        row = matches.iloc[0]
 
         return {
             'frame': int(row['frame']),
