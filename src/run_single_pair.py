@@ -11,7 +11,6 @@ import cv2
 
 from .core.camera_calibration import CameraCalibration
 from .core.pose_estimator import PoseEstimator
-from .utils.geometry import rotation_to_euler_yup
 
 
 def main():
@@ -57,9 +56,6 @@ def main():
     # Estimate pose
     R, t = estimator.estimate(img1, img2)
 
-    # Convert to Euler angles
-    yaw, pitch, roll = rotation_to_euler_yup(R)
-
     # Display results
     print("\n=== Relative Pose Estimation ===")
     print(f"\nImages: {img1_path} -> {img2_path}")
@@ -67,10 +63,6 @@ def main():
     print(R)
     print(f"\nTranslation t (direction only):")
     print(t.flatten())
-    print(f"\nEuler Angles (degrees):")
-    print(f"  Yaw:   {yaw:.2f}")
-    print(f"  Pitch: {pitch:.2f}")
-    print(f"  Roll:  {roll:.2f}")
 
 
 if __name__ == "__main__":
