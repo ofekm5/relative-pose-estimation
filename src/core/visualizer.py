@@ -283,7 +283,7 @@ class Visualizer:
         # Apply rotation
         direction = R @ base
 
-        # Flip to match convention (if needed)
+        # Negate to convert from camera's +Z forward to world's -Z forward (Y-up convention)
         direction = -direction
 
         return direction / np.linalg.norm(direction)
