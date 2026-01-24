@@ -131,58 +131,80 @@ This is the same approach used in modern SLAM and Visual Odometry systems.
 ## 📦 Project Structure
 
 ```
-relative-pose-estimation-opencv/
-│
+relative-pose-estimation/
 ├── src/
-│   ├── main.cpp              # Entry point
-│   ├── orb_features.cpp      # ORB keypoints + descriptors
-│   ├── match_features.cpp    # Feature matching
-│   ├── essential_pose.cpp    # Essential matrix + RecoverPose
-│   ├── rotation_utils.cpp    # Convert R → Euler angles
-│   ├── camera.cpp            # Camera intrinsics handling
-│   └── utils/                # Extra helper functions
-│
-├── include/                  # Header files
-├── Dockerfile                # ARM-compatible OpenCV build
+│   ├── pipeline.py              # Main orchestrator
+│   ├── core/                    # High-level components
+│   │   ├── camera_calibration.py
+│   │   ├── ground_truth_loader.py
+│   │   ├── pose_estimator.py
+│   │   ├── batch_processor.py
+│   │   ├── pose_evaluator.py
+│   │   └── visualizer.py
+│   └── utils/                   # Helper functions
+│       ├── image_loader.py
+│       └── geometry.py
+├── data/                        # Input data
+│   ├── camera_poses.txt         # Ground truth
+│   └── images/                  # PNG frames
+├── results/                     # Output directory
+├── Dockerfile
 └── README.md
 ```
 
 ---
 
-## 🛠 Build & Run using Docker
+## 🛠 Quick Start
 
-### **1. Build Docker image**
+### **Option 1: Virtual Environment**
 
+```bash
+# Setup
+python3 -m venv venv
+source venv/bin/activate  # Linux/Mac
+venv\Scripts\activate     # Windows
+
+# Install and run
+pip install -r requirements.txt
+python -m src.pipeline
 ```
-docker build -t pose-estimator .
-```
 
-This image contains:
+### **Option 2: Docker**
 
-* OpenCV (compiled with ARM/NEON optimizations)
-* The C++ build of this project
-* A minimal runtime environment for Raspberry Pi or x86
+```bash
+# Build
+docker build -t pose-estimator:latest .
 
----
-
-### **2. Run**
-
-```
+# Run (Linux/Mac)
 docker run --rm \
-  -v $(pwd)/images:/data \
-  pose-estimator \
-  /data/before.jpg /data/after.jpg
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/results:/app/results \
+  pose-estimator:latest \
+  python -m src.pipeline
+
+# Run (Windows PowerShell)
+docker run --rm `
+  -v ${PWD}/data:/app/data `
+  -v ${PWD}/results:/app/results `
+  pose-estimator:latest `
+  python -m src.pipeline
 ```
 
-The output format is:
+### **Option 3: Programmatic**
 
+```python
+from src.pipeline import PoseEstimationPipeline
+
+pipeline = PoseEstimationPipeline()
+pipeline.setup()
+results = pipeline.run(step=15, create_plot=True, create_video=True)
 ```
-Tx: ...
-Ty: ...
-Tz: ...
-Roll: ...
-Pitch: ...
-Yaw: ...
-```
+
+### **Output**
+
+Results are saved to `results/`:
+- `orientation_plot.html` - 3D trajectory visualization
+- `pose_comparison.mp4` - Annotated video
+- `evaluation_results.csv` - Error metrics
 
 ---
