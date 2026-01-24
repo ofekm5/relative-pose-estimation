@@ -104,28 +104,58 @@ pip install -r requirements.txt
 
 ### **Run Evaluation Pipelines**
 
+**Phone data evaluation:**
 ```bash
-# Phone data evaluation (step=5, ZYX convention)
+python -m src.run_phone_data [--step STEP] [--no-plot] [--no-video] [--video-fps FPS]
+
+# Optional arguments:
+#   --step STEP        Frame step interval (default: 5)
+#   --no-plot          Skip plot generation
+#   --no-video         Skip video generation
+#   --video-fps FPS    Video FPS (default: 5)
+
+# Example with defaults:
 python -m src.run_phone_data
 
-# Simulator data evaluation (step=15, YUP convention)
-python -m src.run_simulator_data
-
-# Single pair estimation (custom images)
-python -m src.run_single_pair --img1 path/to/img1.png --img2 path/to/img2.png
+# Example with custom step:
+python -m src.run_phone_data --step 10 --video-fps 8
 ```
 
-### **Custom Options**
-
+**Simulator data evaluation:**
 ```bash
-# Custom step interval
-python -m src.run_phone_data --step 10
+python -m src.run_simulator_data [--step STEP] [--no-plot] [--no-video] [--video-fps FPS]
 
-# Skip visualization
+# Optional arguments:
+#   --step STEP        Frame step interval (default: 15)
+#   --no-plot          Skip plot generation
+#   --no-video         Skip video generation
+#   --video-fps FPS    Video FPS (default: 10)
+
+# Example with defaults:
+python -m src.run_simulator_data
+
+# Example skipping visualization:
 python -m src.run_simulator_data --no-plot --no-video
+```
 
-# Custom video FPS
-python -m src.run_phone_data --video-fps 10
+**Single pair estimation:**
+```bash
+python -m src.run_single_pair [--img1 PATH] [--img2 PATH] [--calibration PATH]
+
+# Optional arguments:
+#   --img1 PATH              Path to first image (default: evaluation-runs/single-pair/images/000000.png)
+#   --img2 PATH              Path to second image (default: evaluation-runs/single-pair/images/000015.png)
+#   --calibration PATH       Path to calibration .npz file (default: uses CameraCalibration defaults)
+#   -c PATH                  Short form of --calibration
+
+# Example with defaults (uses frames 0 and 15 from single-pair directory):
+python -m src.run_single_pair
+
+# Example with custom images:
+python -m src.run_single_pair --img1 path/to/img1.png --img2 path/to/img2.png
+
+# Example with custom calibration:
+python -m src.run_single_pair -c evaluation-runs/phone-data/data/calibration_scaled.npz
 ```
 
 ### **Docker Usage**
@@ -165,6 +195,34 @@ Results are saved to `evaluation-runs/{dataset}/results/`:
 - `orientation_plot.html` - 3D trajectory visualization
 - `pose_comparison.mp4` - Annotated video
 - `evaluation_results.csv` - Error metrics
+
+---
+
+## 📷 Camera Calibration (Phone Data)
+
+The phone data evaluation uses pre-calibrated camera intrinsics stored in `evaluation-runs/phone-data/data/calibration_scaled.npz`.
+
+### **Calibration Process**
+
+The calibration was performed using classical chessboard-based calibration:
+
+1. **Chessboard images captured** - 28 images of a 7×7 chessboard (4cm squares) from various angles
+2. **Corner detection** - OpenCV's `findChessboardCorners` + `cornerSubPix` for sub-pixel accuracy
+3. **Camera calibration** - `cv2.calibrateCamera` computed intrinsic matrix K and distortion coefficients
+4. **Resolution scaling** - K matrix scaled by ~2.36× to match phone data images (848×478 pixels)
+
+### **Calibration Files**
+
+- **Source:** `evaluation-runs/phone-data/camera_calibration_code/`
+  - `calibrate.py` - Chessboard calibration script
+  - `calibration_filtered.npz` - Original K matrix (high resolution)
+  - `chess_calibration/*.jpeg` - 28 chessboard images used for calibration
+
+- **Output:** `evaluation-runs/phone-data/data/calibration_scaled.npz`
+  - Contains: Camera matrix K scaled to 848×478 resolution
+  - Used by: `run_phone_data.py` for pose estimation
+
+**Note:** The `camera_calibration_code` folder is **reference material** documenting the calibration process. It does not participate in the final workflow but shows how the phone's camera intrinsics were derived.
 
 ---
 
