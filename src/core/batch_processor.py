@@ -6,7 +6,9 @@ High-level component for processing sequences of frames.
 from pathlib import Path
 import numpy as np
 from ..utils.image_loader import load_image_pair
-from ..utils.geometry import rotation_to_euler_yup, euler_to_rotation_yup
+from ..utils.geometry import (
+    rotation_to_euler, euler_to_rotation, CONVENTION_YUP
+)
 
 
 class BatchProcessor:
@@ -17,7 +19,8 @@ class BatchProcessor:
     across multiple consecutive frames.
     """
 
-    def __init__(self, images_dir, pose_estimator, ground_truth_loader):
+    def __init__(self, images_dir, pose_estimator, ground_truth_loader,
+                 euler_convention=CONVENTION_YUP):
         """
         Initialize batch processor.
 
@@ -25,10 +28,12 @@ class BatchProcessor:
             images_dir: Directory containing image files
             pose_estimator: PoseEstimator instance for computing relative poses
             ground_truth_loader: GroundTruthLoader instance for accessing frame data
+            euler_convention: Euler angle convention ('yup' or 'zyx')
         """
         self.images_dir = Path(images_dir)
         self.pose_estimator = pose_estimator
         self.gt_loader = ground_truth_loader
+        self.euler_convention = euler_convention
 
     def process_sequence(self, frame_indices):
         """
@@ -80,7 +85,8 @@ class BatchProcessor:
             prev_yaw = gt_pose1['yaw']
 
             # Convert ground truth orientation to rotation matrix
-            R_prev_world = euler_to_rotation_yup(prev_yaw, prev_pitch, prev_roll)
+            R_prev_world = euler_to_rotation(prev_yaw, prev_pitch, prev_roll,
+                                             convention=self.euler_convention)
 
             # Estimate relative pose (with VP refinement if enabled)
             R_rel, t_rel = self.pose_estimator.estimate(img1, img2, R_prev=R_prev_world)
@@ -91,7 +97,8 @@ class BatchProcessor:
             R_new_world = R_prev_world @ R_rel
 
             # Convert back to Euler angles
-            yaw_est, pitch_est, roll_est = rotation_to_euler_yup(R_new_world)
+            yaw_est, pitch_est, roll_est = rotation_to_euler(R_new_world,
+                                                              convention=self.euler_convention)
 
             # Store results
             results['frames'].append(frame2_idx)

@@ -11,6 +11,7 @@ from .core.batch_processor import BatchProcessor
 from .core.pose_evaluator import PoseEvaluator
 from .core.visualizer import Visualizer
 from .utils.image_loader import load_image
+from .utils.geometry import CONVENTION_YUP
 import numpy as np
 
 
@@ -30,7 +31,8 @@ class PoseEstimationPipeline:
                  calibration_file=None,  # New: .npz file path
                  feature_method="ORB",
                  norm_type="Hamming",
-                 max_matches=500):
+                 max_matches=500,
+                 euler_convention=CONVENTION_YUP):
         """
         Initialize pose estimation pipeline.
 
@@ -44,6 +46,7 @@ class PoseEstimationPipeline:
             feature_method: Feature detector method ('ORB' or 'SIFT')
             norm_type: Distance norm for matching ('Hamming' for ORB, 'L2' for SIFT)
             max_matches: Maximum number of matches to use for pose estimation
+            euler_convention: Euler angle convention ('yup' for simulator, 'zyx' for phone)
         """
         self.data_dir = Path(data_dir)
         self.images_dir = Path(images_dir) if images_dir else self.data_dir / "images"
@@ -57,6 +60,7 @@ class PoseEstimationPipeline:
         self.max_matches = max_matches
         self.camera_matrix = camera_matrix
         self.calibration_file = calibration_file
+        self.euler_convention = euler_convention
 
         # Components (initialized in setup)
         self.camera_calibration = None
@@ -100,12 +104,14 @@ class PoseEstimationPipeline:
         self.batch_processor = BatchProcessor(
             images_dir=self.images_dir,
             pose_estimator=self.pose_estimator,
-            ground_truth_loader=self.gt_loader
+            ground_truth_loader=self.gt_loader,
+            euler_convention=self.euler_convention
         )
 
         # 5. Setup evaluator
         self.pose_evaluator = PoseEvaluator(
-            ground_truth_loader=self.gt_loader
+            ground_truth_loader=self.gt_loader,
+            euler_convention=self.euler_convention
         )
 
         # 6. Setup visualizer
@@ -119,6 +125,7 @@ class PoseEstimationPipeline:
         print(f"[INFO] Ground truth: {self.gt_path}")
         print(f"[INFO] Results directory: {self.results_dir}")
         print(f"[INFO] Feature method: {self.feature_method} (nfeatures=4000)")
+        print(f"[INFO] Euler convention: {self.euler_convention}")
         print(f"[INFO] VP refinement: Enabled")
         print(f"[INFO] Camera matrix K computed from image size: {sample_img.shape}")
 

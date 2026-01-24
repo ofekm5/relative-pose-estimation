@@ -5,7 +5,9 @@ High-level component for comparing estimated poses against ground truth.
 
 import numpy as np
 import pandas as pd
-from ..utils.geometry import rotation_error, translation_direction_error, euler_to_rotation_yup
+from ..utils.geometry import (
+    rotation_error, translation_direction_error, euler_to_rotation, CONVENTION_YUP
+)
 
 
 class PoseEvaluator:
@@ -16,14 +18,16 @@ class PoseEvaluator:
     summary statistics for trajectory accuracy assessment.
     """
 
-    def __init__(self, ground_truth_loader):
+    def __init__(self, ground_truth_loader, euler_convention=CONVENTION_YUP):
         """
         Initialize pose evaluator.
 
         Args:
             ground_truth_loader: GroundTruthLoader instance for accessing GT poses
+            euler_convention: Euler angle convention ('yup' or 'zyx')
         """
         self.gt_loader = ground_truth_loader
+        self.euler_convention = euler_convention
 
     def evaluate_sequence(self, estimated_results):
         """
@@ -87,7 +91,8 @@ class PoseEvaluator:
             yaw_error_val = self._wrap_angle_error(yaw_error_val)
 
             # Compute rotation matrix error
-            R_gt = euler_to_rotation_yup(gt_yaw, gt_pitch, gt_roll)
+            R_gt = euler_to_rotation(gt_yaw, gt_pitch, gt_roll,
+                                     convention=self.euler_convention)
             rot_error = rotation_error(est_R[i], R_gt)
 
             # Store results
