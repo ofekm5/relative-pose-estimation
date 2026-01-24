@@ -72,6 +72,7 @@ class PoseEvaluator:
         gt_yaw_vals = []
 
         # Evaluate each frame
+        prev_gt_pos = None
         for i, frame_idx in enumerate(frames):
             # Get ground truth pose
             gt_pose = self.gt_loader.get_pose(frame_idx)
@@ -79,6 +80,7 @@ class PoseEvaluator:
             gt_roll = gt_pose['roll']
             gt_pitch = gt_pose['pitch']
             gt_yaw = gt_pose['yaw']
+            gt_pos = np.array([gt_pose['x'], gt_pose['y'], gt_pose['z']])
 
             # Compute angle errors
             roll_error_val = abs(est_roll[i] - gt_roll)
@@ -105,9 +107,16 @@ class PoseEvaluator:
             gt_pitch_vals.append(gt_pitch)
             gt_yaw_vals.append(gt_yaw)
 
-            # Note: Translation direction error requires delta poses,
-            # which would need previous frame data. Skipping for now.
-            translation_dir_errors.append(0.0)  # Placeholder
+            # Compute translation direction error using GT delta position
+            if prev_gt_pos is not None:
+                gt_delta = gt_pos - prev_gt_pos
+                trans_err = translation_direction_error(est_t[i], gt_delta)
+                translation_dir_errors.append(trans_err)
+            else:
+                # First frame has no previous position
+                translation_dir_errors.append(0.0)
+
+            prev_gt_pos = gt_pos
 
         return {
             'frames': frames,
@@ -136,7 +145,7 @@ class PoseEvaluator:
         """
         stats = {}
 
-        for metric in ['roll_error', 'pitch_error', 'yaw_error', 'rotation_error']:
+        for metric in ['roll_error', 'pitch_error', 'yaw_error', 'rotation_error', 'translation_dir_error']:
             errors = evaluation_results[metric]
 
             stats[f'{metric}_mean'] = np.mean(errors)
@@ -168,7 +177,8 @@ class PoseEvaluator:
             'roll_error': evaluation_results['roll_error'],
             'pitch_error': evaluation_results['pitch_error'],
             'yaw_error': evaluation_results['yaw_error'],
-            'rotation_error': evaluation_results['rotation_error']
+            'rotation_error': evaluation_results['rotation_error'],
+            'translation_dir_error': evaluation_results['translation_dir_error']
         })
 
         return df
@@ -224,5 +234,9 @@ class PoseEvaluator:
         print("\nYaw Errors (degrees):")
         print(f"  Mean:   {stats['yaw_error_mean']:.2f}")
         print(f"  Std:    {stats['yaw_error_std']:.2f}")
+
+        print("\nTranslation Direction Errors (degrees):")
+        print(f"  Mean:   {stats['translation_dir_error_mean']:.2f}")
+        print(f"  Std:    {stats['translation_dir_error_std']:.2f}")
 
         print("\n" + "="*60 + "\n")
