@@ -13,6 +13,40 @@ This pipeline requires **no dataset** and **no learning**, and works entirely wi
 
 ---
 
+## 📦 Project Structure
+
+```
+relative-pose-estimation/
+├── src/
+│   ├── pipeline.py              # Main orchestrator
+│   ├── run_phone_data.py        # Phone data runner
+│   ├── run_simulator_data.py   # Simulator data runner
+│   ├── run_single_pair.py       # Single pair estimator
+│   ├── core/                    # High-level components
+│   │   ├── camera_calibration.py
+│   │   ├── ground_truth_loader.py
+│   │   ├── pose_estimator.py
+│   │   ├── batch_processor.py
+│   │   ├── pose_evaluator.py
+│   │   └── visualizer.py
+│   └── utils/                   # Helper functions
+│       ├── image_loader.py
+│       └── geometry.py
+├── evaluation-runs/             # Evaluation datasets
+│   ├── phone-data/
+│   │   ├── data/                # Images, ground truth, calibration
+│   │   └── results/             # Output files
+│   ├── simulator-data/
+│   │   ├── data/                # Images, ground truth
+│   │   └── results/             # Output files
+│   └── single-pair/
+│       └── images/              # Two test images
+├── Dockerfile
+└── README.md
+```
+
+---
+
 ## 🧠 Method Overview
 
 The 6-DoF relative motion is computed using the following pipeline:
@@ -51,114 +85,6 @@ Decompose the Essential Matrix into:
 
 Convert rotation to Euler angles (Roll, Pitch, Yaw).
 Return all six parameters as the relative motion between the images.
-
----
-
-## 🧩 **Mathematical Background (Practical Explanation)**
-
-Although the algorithm relies on epipolar geometry, you do **not** need deep theoretical background.
-Here is the practical intuition behind what happens:
-
-### **1. Matching points give clues about camera movement**
-
-If the camera moves:
-
-* forward → points move outward from the center
-* right → points shift left
-* yaw → points rotate
-* roll → entire image tilts
-
-Each matched pair `(p1, p2)` reveals a small piece of information about how the camera moved.
-
----
-
-### **2. All point pairs must satisfy one geometric constraint**
-
-For two ideal pinhole-camera views of a static scene, corresponding points satisfy:
-
-[
-p_2^T , E , p_1 = 0
-]
-
-Where:
-
-* (p_1, p_2) are normalized 2D pixel coordinates
-* (E) is the **Essential Matrix**
-* The equation expresses the fact that the 3D point, the first camera center, and the second camera center lie on a single plane
-
-You don’t need to compute this manually — OpenCV does it for you.
-
----
-
-### **3. Solving for E extracts camera motion**
-
-OpenCV estimates the matrix (E) from many matched point pairs using RANSAC:
-
-```cpp
-E = cv::findEssentialMat(pts1, pts2, K)
-```
-
-Since (E) depends only on:
-
-* the direction the camera turned, and
-* the direction it translated
-
-we can extract those parameters from it.
-
----
-
-### **4. RecoverPose decomposes E into R and T**
-
-```cpp
-cv::recoverPose(E, pts1, pts2, K, R, T);
-```
-
-This gives:
-
-* **R**: rotation matrix (exact)
-* **T**: translation vector (up to scale)
-
-Together they describe the full **6 DoF** relative pose:
-
-```
-Tx, Ty, Tz, Roll, Pitch, Yaw
-```
-
-This is the same approach used in modern SLAM and Visual Odometry systems.
-
----
-
-## 📦 Project Structure
-
-```
-relative-pose-estimation/
-├── src/
-│   ├── pipeline.py              # Main orchestrator
-│   ├── run_phone_data.py        # Phone data runner
-│   ├── run_simulator_data.py   # Simulator data runner
-│   ├── run_single_pair.py       # Single pair estimator
-│   ├── core/                    # High-level components
-│   │   ├── camera_calibration.py
-│   │   ├── ground_truth_loader.py
-│   │   ├── pose_estimator.py
-│   │   ├── batch_processor.py
-│   │   ├── pose_evaluator.py
-│   │   └── visualizer.py
-│   └── utils/                   # Helper functions
-│       ├── image_loader.py
-│       └── geometry.py
-├── evaluation-runs/             # Evaluation datasets
-│   ├── phone-data/
-│   │   ├── data/                # Images, ground truth, calibration
-│   │   └── results/             # Output files
-│   ├── simulator-data/
-│   │   ├── data/                # Images, ground truth
-│   │   └── results/             # Output files
-│   └── single-pair/
-│       └── images/              # Two test images
-├── Dockerfile
-└── README.md
-```
 
 ---
 
@@ -249,5 +175,79 @@ Results are saved to `evaluation-runs/{dataset}/results/`:
 **Development Tools:**
 - **ChatGPT** was used for advanced research on the mathematical foundations of multi-view geometry and the OpenCV image processing framework, which made the core image processing pipeline possible.
 - **Claude Code** was instrumental in refactoring the codebase to be tight, efficient, and modular, following SOLID principles and best practices.
+
+---
+
+## 🧩 **Mathematical Background (Practical Explanation)**
+
+Although the algorithm relies on epipolar geometry, you do **not** need deep theoretical background.
+Here is the practical intuition behind what happens:
+
+### **1. Matching points give clues about camera movement**
+
+If the camera moves:
+
+* forward → points move outward from the center
+* right → points shift left
+* yaw → points rotate
+* roll → entire image tilts
+
+Each matched pair `(p1, p2)` reveals a small piece of information about how the camera moved.
+
+---
+
+### **2. All point pairs must satisfy one geometric constraint**
+
+For two ideal pinhole-camera views of a static scene, corresponding points satisfy:
+
+[
+p_2^T , E , p_1 = 0
+]
+
+Where:
+
+* (p_1, p_2) are normalized 2D pixel coordinates
+* (E) is the **Essential Matrix**
+* The equation expresses the fact that the 3D point, the first camera center, and the second camera center lie on a single plane
+
+You don’t need to compute this manually — OpenCV does it for you.
+
+---
+
+### **3. Solving for E extracts camera motion**
+
+OpenCV estimates the matrix (E) from many matched point pairs using RANSAC:
+
+```cpp
+E = cv::findEssentialMat(pts1, pts2, K)
+```
+
+Since (E) depends only on:
+
+* the direction the camera turned, and
+* the direction it translated
+
+we can extract those parameters from it.
+
+---
+
+### **4. RecoverPose decomposes E into R and T**
+
+```cpp
+cv::recoverPose(E, pts1, pts2, K, R, T);
+```
+
+This gives:
+
+* **R**: rotation matrix (exact)
+* **T**: translation vector (up to scale)
+
+Together they describe the full **6 DoF** relative pose:
+
+```
+Tx, Ty, Tz, Roll, Pitch, Yaw
+```
+
+This is the same approach used in modern SLAM and Visual Odometry systems.
 
 ---
