@@ -49,5 +49,7 @@
 venv/
 env/
 ENV/
-refactor_code_old
 /myenv/
+
+# Claude Code configuration
+.claude/
