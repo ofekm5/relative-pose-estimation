@@ -194,12 +194,8 @@ class PoseEvaluator:
         Returns:
             float: Wrapped error in degrees
         """
-        while error_deg > 180:
-            error_deg -= 360
-        while error_deg < -180:
-            error_deg += 360
-
-        return abs(error_deg)
+        wrapped = ((error_deg + 180) % 360) - 180
+        return abs(wrapped)
 
     def print_summary(self, evaluation_results):
         """
