@@ -2,7 +2,7 @@
 
 ### **Classical Multi-View Geometry — No Training Required**
 
-This repository implements a complete system for estimating **6 Degrees of Freedom (6-DoF)** camera motion between two JPEG images taken consecutively by a moving robot (e.g., drone, car, rover).
+This repository implements a complete system for estimating **6 Degrees of Freedom (6-DoF)** camera motion between two images taken consecutively by a moving robot (e.g., drone, car, rover).
 
 The method uses **ORB features**, **feature matching**, **Essential Matrix estimation**, and **RecoverPose** to compute:
 
@@ -134,6 +134,9 @@ This is the same approach used in modern SLAM and Visual Odometry systems.
 relative-pose-estimation/
 ├── src/
 │   ├── pipeline.py              # Main orchestrator
+│   ├── run_phone_data.py        # Phone data runner
+│   ├── run_simulator_data.py   # Simulator data runner
+│   ├── run_single_pair.py       # Single pair estimator
 │   ├── core/                    # High-level components
 │   │   ├── camera_calibration.py
 │   │   ├── ground_truth_loader.py
@@ -144,10 +147,15 @@ relative-pose-estimation/
 │   └── utils/                   # Helper functions
 │       ├── image_loader.py
 │       └── geometry.py
-├── data/                        # Input data
-│   ├── camera_poses.txt         # Ground truth
-│   └── images/                  # PNG frames
-├── results/                     # Output directory
+├── evaluation-runs/             # Evaluation datasets
+│   ├── phone-data/
+│   │   ├── data/                # Images, ground truth, calibration
+│   │   └── results/             # Output files
+│   ├── simulator-data/
+│   │   ├── data/                # Images, ground truth
+│   │   └── results/             # Output files
+│   └── single-pair/
+│       └── images/              # Two test images
 ├── Dockerfile
 └── README.md
 ```
@@ -156,55 +164,90 @@ relative-pose-estimation/
 
 ## 🛠 Quick Start
 
-### **Option 1: Virtual Environment**
+### **Prerequisites**
 
 ```bash
-# Setup
+# Setup virtual environment
 python3 -m venv venv
 source venv/bin/activate  # Linux/Mac
 venv\Scripts\activate     # Windows
 
-# Install and run
+# Install dependencies
 pip install -r requirements.txt
-python -m src.pipeline
 ```
 
-### **Option 2: Docker**
+### **Run Evaluation Pipelines**
 
 ```bash
-# Build
-docker build -t pose-estimator:latest .
+# Phone data evaluation (step=5, ZYX convention)
+python -m src.run_phone_data
 
-# Run (Linux/Mac)
-docker run --rm \
-  -v $(pwd)/data:/app/data \
-  -v $(pwd)/results:/app/results \
-  pose-estimator:latest \
-  python -m src.pipeline
+# Simulator data evaluation (step=15, YUP convention)
+python -m src.run_simulator_data
 
-# Run (Windows PowerShell)
-docker run --rm `
-  -v ${PWD}/data:/app/data `
-  -v ${PWD}/results:/app/results `
-  pose-estimator:latest `
-  python -m src.pipeline
+# Single pair estimation (custom images)
+python -m src.run_single_pair --img1 path/to/img1.png --img2 path/to/img2.png
 ```
 
-### **Option 3: Programmatic**
+### **Custom Options**
 
-```python
-from src.pipeline import PoseEstimationPipeline
+```bash
+# Custom step interval
+python -m src.run_phone_data --step 10
 
-pipeline = PoseEstimationPipeline()
-pipeline.setup()
-results = pipeline.run(step=15, create_plot=True, create_video=True)
+# Skip visualization
+python -m src.run_simulator_data --no-plot --no-video
+
+# Custom video FPS
+python -m src.run_phone_data --video-fps 10
+```
+
+### **Docker Usage**
+
+```bash
+# Build Docker image
+docker build -t pose-estimator:latest .
+
+# Phone data evaluation (Linux/Mac)
+docker run --rm \
+  -v $(pwd)/evaluation-runs:/app/evaluation-runs \
+  pose-estimator:latest \
+  python -m src.run_phone_data
+
+# Simulator data evaluation (Linux/Mac)
+docker run --rm \
+  -v $(pwd)/evaluation-runs:/app/evaluation-runs \
+  pose-estimator:latest \
+  python -m src.run_simulator_data
+
+# Single pair estimation (Linux/Mac)
+docker run --rm \
+  -v $(pwd)/evaluation-runs:/app/evaluation-runs \
+  pose-estimator:latest \
+  python -m src.run_single_pair
+
+# Running single pair with Windows PowerShell
+docker run --rm `
+  -v ${PWD}/evaluation-runs:/app/evaluation-runs `
+  pose-estimator:latest `
+  python -m src.run_single_pair
 ```
 
 ### **Output**
 
-Results are saved to `results/`:
+Results are saved to `evaluation-runs/{dataset}/results/`:
 - `orientation_plot.html` - 3D trajectory visualization
 - `pose_comparison.mp4` - Annotated video
 - `evaluation_results.csv` - Error metrics
+
+---
+
+## 🙏 Development Credits
+
+**Architecture & Design:** This solution was architected and designed by the repository owner.
+
+**Development Tools:**
+- **ChatGPT** was used for advanced research on the mathematical foundations of multi-view geometry and the OpenCV image processing framework, which made the core image processing pipeline possible.
+- **Claude Code** was instrumental in refactoring the codebase to be tight, efficient, and modular, following SOLID principles and best practices.
 
 ---

@@ -56,29 +56,45 @@ This is a **6-DoF (6 Degrees of Freedom) Relative Pose Estimation** system that 
 
 ### Python Evaluation (Current Implementation)
 
-**Run Full Pipeline:**
+**Run evaluation pipelines:**
 ```bash
-# From project root
-python -m src.pipeline
+# Phone data evaluation (step=5, ZYX convention)
+python -m src.run_phone_data
+
+# Simulator data evaluation (step=15, YUP convention)
+python -m src.run_simulator_data
+
+# Single pair estimation (default: simulator frames 0 and 15)
+python -m src.run_single_pair
+
+# Single pair with custom images
+python -m src.run_single_pair --img1 path/to/img1.png --img2 path/to/img2.png
 ```
 
-**Or programmatically:**
+**Custom options:**
+```bash
+# Custom step interval
+python -m src.run_phone_data --step 10
+
+# Skip visualization
+python -m src.run_simulator_data --no-plot --no-video
+```
+
+**Programmatic usage:**
 ```python
 from src.pipeline import PoseEstimationPipeline
 
 pipeline = PoseEstimationPipeline(
-    data_dir="data",
-    results_dir="results",
+    data_dir="evaluation-runs/simulator-data/data",
+    results_dir="evaluation-runs/simulator-data/results",
     feature_method="ORB",
-    max_matches=500
+    max_matches=500,
+    euler_convention="yup"
 )
 pipeline.setup()
 
 # Full evaluation with plot and video
 results = pipeline.run(step=15, create_plot=True, create_video=True)
-
-# Or single pair estimation
-pipeline.run_single_pair(0, 15, show_debug=True)
 ```
 
 ### C++ Build (Future)
@@ -92,8 +108,6 @@ make run IMG1=path/to/img1.jpg IMG2=path/to/img2.jpg
 make docker-build
 make docker-run
 ```
-
-See USAGE.md for setup and usage instructions.
 
 ### Dependencies
 
@@ -240,14 +254,21 @@ positions = gt_loader.get_trajectory(step=15)  # (N, 3) array of [x, y, z]
 ```
 
 ### Data Location
-- **Data directory:** `data/`
-  - Ground truth: `data/camera_poses.txt`
-  - Images: `data/images/XXXXXX.png`
+- **Evaluation runs:** `evaluation-runs/`
+  - Phone data: `evaluation-runs/phone-data/data/`
+    - Ground truth: `camera_poses_zyx.txt`
+    - Calibration: `calibration_scaled.npz`
+    - Images: `images/XXXXXX.png`
+  - Simulator data: `evaluation-runs/simulator-data/data/`
+    - Ground truth: `camera_poses.txt`
+    - Images: `images/XXXXXX.png`
+  - Single pair: `evaluation-runs/single-pair/images/`
+    - Test images: `000000.png`, `000015.png`
   - Frame numbering: zero-padded 6 digits (e.g., 000000.png, 000015.png)
-- **Results directory:** `results/`
-  - Plots: `results/orientation_plot.html`
-  - Videos: `results/pose_comparison.mp4`
-  - CSV: `results/evaluation_results.csv`
+- **Results directories:** `evaluation-runs/{dataset}/results/`
+  - Plots: `orientation_plot.html`
+  - Videos: `pose_comparison.mp4`
+  - CSV: `evaluation_results.csv`
 
 ## Important Implementation Details
 
@@ -297,11 +318,12 @@ from src.pipeline import PoseEstimationPipeline
 
 # Initialize
 pipeline = PoseEstimationPipeline(
-    data_dir="data",
-    results_dir="results",
+    data_dir="evaluation-runs/simulator-data/data",
+    results_dir="evaluation-runs/simulator-data/results",
     feature_method="ORB",  # or "SIFT"
     norm_type="Hamming",   # or "L2" for SIFT
-    max_matches=500
+    max_matches=500,
+    euler_convention="yup"  # or "zyx" for phone data
 )
 
 # Setup components
@@ -340,7 +362,8 @@ estimator = PoseEstimator(
 )
 
 # Estimate pose
-img1, img2 = load_image_pair("data/images/000000.png", "data/images/000015.png")
+img1, img2 = load_image_pair("evaluation-runs/simulator-data/data/images/000000.png",
+                              "evaluation-runs/simulator-data/data/images/000015.png")
 R, t = estimator.estimate(img1, img2)
 ```
 
@@ -349,7 +372,7 @@ R, t = estimator.estimate(img1, img2)
 from src.core.batch_processor import BatchProcessor
 
 processor = BatchProcessor(
-    images_dir="data/images",
+    images_dir="evaluation-runs/simulator-data/data/images",
     pose_estimator=estimator,
     ground_truth_loader=gt_loader
 )
@@ -395,6 +418,9 @@ calibration = CameraCalibration(
 ```
 src/
   pipeline.py              # Main orchestrator
+  run_phone_data.py        # Phone data evaluation runner
+  run_simulator_data.py    # Simulator data evaluation runner
+  run_single_pair.py       # Single pair estimation runner
   core/
     camera_calibration.py  # Camera intrinsics
     ground_truth_loader.py # GT data management
@@ -409,6 +435,21 @@ src/
     plot_trajectory.py     # Standalone trajectory viz
     plot_vectors.py        # Standalone vector viz
 
+evaluation-runs/           # Evaluation datasets and results
+  phone-data/
+    data/
+      camera_poses_zyx.txt # Ground truth (ZYX convention)
+      calibration_scaled.npz # Camera calibration
+      images/              # PNG frames (000000.png, ...)
+    results/               # Output files (created on run)
+  simulator-data/
+    data/
+      camera_poses.txt     # Ground truth (YUP convention)
+      images/              # PNG frames (000000.png, ...)
+    results/               # Output files (created on run)
+  single-pair/
+    images/                # Test image pair (000000.png, 000015.png)
+
 orr-src/                   # Reference implementation (for validation)
   pose_matcher_full.py     # Complete pose matcher with VP refinement
   matcher.py               # BFMatcher with crossCheck (no Lowe's ratio test)
@@ -416,21 +457,12 @@ orr-src/                   # Reference implementation (for validation)
   pose_orb_lsd_calibrated.py  # Standalone VP implementation
   plots_graths.py          # Visualization script
 
-data/                      # Input data
-  camera_poses.txt         # Ground truth poses
-  images/                  # PNG frames (000000.png, ...)
-
-results/                   # Output directory
-  orientation_plot.html    # 3D trajectory plot
-  pose_comparison.mp4      # Annotated video
-  evaluation_results.csv   # Error metrics CSV
-
 include/                   # C++ headers (future)
 CMakeLists.txt             # C++ build config
 Dockerfile                 # Python Docker build
-USAGE.md                   # Setup and usage guide
 CLAUDE.md                  # AI assistant guidance
 README.md                  # Project overview
+main.py                    # Legacy entry point (kept for reference)
 ```
 
 ### Reference Implementation (orr-src)
