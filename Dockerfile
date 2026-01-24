@@ -30,11 +30,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy source code
 COPY src/ ./src/
 
-ENV PYTHONPATH=/app:$PYTHONPATH
+ENV PYTHONPATH=/app
 
-CMD if [ -n "$ENTRY_FILE" ]; then \
-        MODULE=$(echo "$ENTRY_FILE" | sed 's/\.py$//' | sed 's/\//./g'); \
-        python3 -m "$MODULE"; \
-    else \
-        python3; \
-    fi
+CMD ["/bin/sh", "-c", "if [ -n \"$ENTRY_FILE\" ]; then MODULE=$(echo \"$ENTRY_FILE\" | sed 's/\\.py$//' | sed 's/\\//./g'); python3 -m \"$MODULE\"; else python3; fi"]
