@@ -121,7 +121,19 @@ python -m src.run_phone_data
 python -m src.run_phone_data --step 10 --video-fps 8
 ```
 
-**Simulator data evaluation:**
+# Simulator Mapping (Linux 2024 Support)
+
+We used the **rbdlabhaifa** simulator to build **ground truth (GT)**.
+
+
+## Original Repository
+https://github.com/rbdlabhaifa/simulatorMapping
+
+## Linux 2024 Support (Updated Version)
+We modified the simulator to also support **Linux (2024)**.
+
+Updated version:
+https://github.com/orki360/simulatorMapping
 ```bash
 python -m src.run_simulator_data [--step STEP] [--no-plot] [--no-video] [--video-fps FPS]
 
