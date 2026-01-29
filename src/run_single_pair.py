@@ -63,6 +63,8 @@ def main():
     print(R)
     print(f"\nTranslation t (direction only):")
     print(t.flatten())
+    return R, t
+
 
 
 if __name__ == "__main__":
