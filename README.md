@@ -13,6 +13,22 @@ This pipeline requires **no dataset** and **no learning**, and works entirely wi
 
 ---
 
+
+## Simulator Mapping (Linux 2024 Support)
+
+We used the **rbdlabhaifa** simulator to build **ground truth (GT)**.
+
+
+### Original Repository
+https://github.com/rbdlabhaifa/simulatorMapping
+
+### Linux 2024 Support (Updated Version)
+We modified the simulator to also support **Linux (2024)**.
+
+Updated version:
+https://github.com/orki360/simulatorMapping
+
+
 ## 📦 Project Structure
 
 ```
@@ -20,7 +36,8 @@ relative-pose-estimation/
 ├── src/
 │   ├── pipeline.py              # Main orchestrator
 │   ├── run_phone_data.py        # Phone data runner
-│   ├── run_simulator_data.py   # Simulator data runner
+│   ├── run_simulator_data.py    # Simulator data runner
+│   ├── run_vo_database_salah.py # Salah Qadah dataset runner
 │   ├── run_single_pair.py       # Single pair estimator
 │   ├── core/                    # High-level components
 │   │   ├── camera_calibration.py
@@ -34,6 +51,9 @@ relative-pose-estimation/
 │       └── geometry.py
 ├── evaluation-runs/             # Evaluation datasets
 │   ├── phone-data/
+│   │   ├── data/                # Images, ground truth, calibration
+│   │   └── results/             # Output files
+│   ├── vo_dataset_salah/
 │   │   ├── data/                # Images, ground truth, calibration
 │   │   └── results/             # Output files
 │   ├── simulator-data/
@@ -109,7 +129,14 @@ pip install -r requirements.txt
 python -m src.run_phone_data [--step STEP] [--no-plot] [--no-video] [--video-fps FPS]
 
 # Optional arguments:
-#   --step STEP        Frame step interval (default: 5)
+#   --step STEP  
+
+
+
+
+
+
+      Frame step interval (default: 5)
 #   --no-plot          Skip plot generation
 #   --no-video         Skip video generation
 #   --video-fps FPS    Video FPS (default: 5)
@@ -121,19 +148,27 @@ python -m src.run_phone_data
 python -m src.run_phone_data --step 10 --video-fps 8
 ```
 
-# Simulator Mapping (Linux 2024 Support)
+**Salah Qadah data evaluation:**
+This project uses data provided by Salah Qadah (sqadah02@campus.haifa.ac.il) for the purpose of evaluating the model.
+```bash
+python -m src.run_vo_database_salah [--step STEP] [--no-plot] [--no-video] [--video-fps FPS]
 
-We used the **rbdlabhaifa** simulator to build **ground truth (GT)**.
+# Optional arguments:
+#   --step STEP        Frame step interval (default: 5)
+#   --no-plot          Skip plot generation
+#   --no-video         Skip video generation
+#   --video-fps FPS    Video FPS (default: 5)
+
+# Example with defaults:
+python -m src.run_vo_database_salah
+
+# Example with custom step:
+python -m src.run_vo_database_salah --step 10 --video-fps 8
+```
 
 
-## Original Repository
-https://github.com/rbdlabhaifa/simulatorMapping
 
-## Linux 2024 Support (Updated Version)
-We modified the simulator to also support **Linux (2024)**.
 
-Updated version:
-https://github.com/orki360/simulatorMapping
 ```bash
 python -m src.run_simulator_data [--step STEP] [--no-plot] [--no-video] [--video-fps FPS]
 

@@ -19,7 +19,7 @@ def main():
                         help='Path to first image (default: evaluation-runs/single-pair/images/000000.png)')
     parser.add_argument('--img2', default='evaluation-runs/single-pair/images/000015.png',
                         help='Path to second image (default: evaluation-runs/single-pair/images/000015.png)')
-    parser.add_argument('--calibration', '-c', help='Optional path to calibration .npz file')
+    parser.add_argument('--calibration', '-c', help='Optional path to calibration .npz file where is "K" is defiend')
 
     args = parser.parse_args()
 

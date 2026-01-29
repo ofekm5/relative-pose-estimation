@@ -1,0 +1,20 @@
+ArUco Marker Configuration
+==========================
+
+Dictionary: DICT_6X6_250
+Marker Size: 15cm x 15cm (0.15m)
+
+Marker World Positions (meters)
+-------------------------------
+ID    X        Y        Z
+0     0.000    0.000    1.730
+1     2.100    0.000    1.795
+2     3.180    1.120    1.897
+3     3.180    2.710    1.975
+4     1.960    3.660    1.925
+
+Coordinate System:
+- Origin: Marker 0 position (X=0, Y=0)
+- X-axis: horizontal
+- Y-axis: horizontal
+- Z-axis: vertical (height from floor)
