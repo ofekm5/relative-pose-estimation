@@ -228,13 +228,13 @@ The calibration was performed using classical chessboard-based calibration:
 
 ---
 
-## 🙏 Development Credits
+## Acknowledgements
 
-**Architecture & Design:** This solution was architected and designed by the repository owner.
+**Architecture & Design:** This solution was architected and designed by Ofek and Orr.
 
 **Development Tools:**
-- **ChatGPT** was used for advanced research on the mathematical foundations of multi-view geometry and the OpenCV image processing framework, which made the core image processing pipeline possible.
-- **Claude Code** was instrumental in refactoring the codebase to be tight, efficient, and modular, following SOLID principles and best practices.
+- **ChatGPT** provided advanced research on the mathematical foundations of multi-view geometry and the OpenCV image processing framework, enabling the core image processing pipeline.
+- **Claude Code** assisted in refactoring the codebase to be tight, efficient, and modular, following SOLID principles and best practices.
 
 ---
 
