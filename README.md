@@ -13,7 +13,6 @@ This pipeline requires **no dataset** and **no learning**, and works entirely wi
 
 ---
 
-
 ## Simulator Mapping (Linux 2024 Support)
 
 We used the **rbdlabhaifa** simulator to build **ground truth (GT)**.
@@ -129,14 +128,7 @@ pip install -r requirements.txt
 python -m src.run_phone_data [--step STEP] [--no-plot] [--no-video] [--video-fps FPS]
 
 # Optional arguments:
-#   --step STEP  
-
-
-
-
-
-
-      Frame step interval (default: 5)
+#   --step STEP        Frame step interval (default: 5)
 #   --no-plot          Skip plot generation
 #   --no-video         Skip video generation
 #   --video-fps FPS    Video FPS (default: 5)
@@ -166,9 +158,7 @@ python -m src.run_vo_database_salah
 python -m src.run_vo_database_salah --step 10 --video-fps 8
 ```
 
-
-
-
+**Simulator data evaluation:**
 ```bash
 python -m src.run_simulator_data [--step STEP] [--no-plot] [--no-video] [--video-fps FPS]
 
@@ -205,10 +195,9 @@ python -m src.run_single_pair --img1 path/to/img1.png --img2 path/to/img2.png
 python -m src.run_single_pair -c evaluation-runs/phone-data/data/calibration_scaled.npz
 
 # The return from run_single_pair will be:
-## R - Rotation matrix   [3*3] 
+## R - Rotation matrix   [3*3]
 ## T - Translation vector [3*1]
 ```
-
 
 ### **Docker Usage**
 
