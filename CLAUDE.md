@@ -19,10 +19,13 @@ This is a **6-DoF (6 Degrees of Freedom) Relative Pose Estimation** system that 
 # Phone data evaluation (step=5, ZYX convention)
 python -m src.run_phone_data
 
+# Salah Qadah dataset evaluation (step=5, ZYX convention)
+python -m src.run_vo_database_salah
+
 # Simulator data evaluation (step=15, YUP convention)
 python -m src.run_simulator_data
 
-# Single pair estimation (default: simulator frames 0 and 15)
+# Single pair estimation (default: simulator frames 0 and 15, returns R and t)
 python -m src.run_single_pair
 
 # Single pair with custom images
@@ -217,6 +220,10 @@ positions = gt_loader.get_trajectory(step=15)  # (N, 3) array of [x, y, z]
     - Ground truth: `camera_poses_zyx.txt`
     - Calibration: `calibration_scaled.npz`
     - Images: `images/XXXXXX.png`
+  - Salah Qadah dataset: `evaluation-runs/vo_dataset_salah/data/`
+    - Ground truth: `camera_poses_zyx.txt`
+    - Calibration: `calibration.npz` (contains "K" or "intrinsic_matrix")
+    - Images: `images/XXXXXX.png` (478 frames)
   - Simulator data: `evaluation-runs/simulator-data/data/`
     - Ground truth: `camera_poses.txt`
     - Images: `images/XXXXXX.png`
@@ -377,8 +384,9 @@ calibration = CameraCalibration(
 src/
   pipeline.py              # Main orchestrator
   run_phone_data.py        # Phone data evaluation runner
+  run_vo_database_salah.py # Salah Qadah dataset evaluation runner
   run_simulator_data.py    # Simulator data evaluation runner
-  run_single_pair.py       # Single pair estimation runner
+  run_single_pair.py       # Single pair estimation runner (returns R, t)
   core/
     camera_calibration.py  # Camera intrinsics
     ground_truth_loader.py # GT data management
@@ -399,6 +407,12 @@ evaluation-runs/           # Evaluation datasets and results
       camera_poses_zyx.txt # Ground truth (ZYX convention)
       calibration_scaled.npz # Camera calibration
       images/              # PNG frames (000000.png, ...)
+    results/               # Output files (created on run)
+  vo_dataset_salah/
+    data/
+      camera_poses_zyx.txt # Ground truth (ZYX convention)
+      calibration.npz      # Camera calibration (contains "K" or "intrinsic_matrix")
+      images/              # PNG frames (000000.png, ..., 000477.png - 478 total)
     results/               # Output files (created on run)
   simulator-data/
     data/
