@@ -13,7 +13,7 @@ This pipeline requires **no dataset** and **no learning**, and works entirely wi
 
 ---
 
-## 🛠 Quick Start
+## Quick Start
 
 ### **Prerequisites**
 
@@ -161,7 +161,7 @@ https://github.com/orki360/simulatorMapping
 
 
 
-## 🧠 Method Overview
+## Method Overview
 
 The 6-DoF relative motion is computed using the following pipeline:
 
@@ -200,7 +200,7 @@ Decompose the Essential Matrix into:
 Convert rotation to Euler angles (Roll, Pitch, Yaw).
 Return all six parameters as the relative motion between the images.
 
-## 📷 Camera Calibration (Phone Data)
+## Camera Calibration (Phone Data)
 
 The phone data evaluation uses pre-calibrated camera intrinsics stored in `evaluation-runs/phone-data/data/calibration_scaled.npz`.
 
@@ -238,7 +238,7 @@ The calibration was performed using classical chessboard-based calibration:
 
 ---
 
-## 🧩 **Mathematical Background (Practical Explanation)**
+## **Mathematical Background (Practical Explanation)**
 
 Although the algorithm relies on epipolar geometry, you do **not** need deep theoretical background.
 Here is the practical intuition behind what happens:
