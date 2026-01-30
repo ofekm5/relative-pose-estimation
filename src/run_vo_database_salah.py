@@ -1,8 +1,8 @@
 """
-Phone data pose estimation pipeline.
+Salah Qadah dataset pose estimation pipeline.
 
 Usage:
-    python -m src.run_phone_data [--step STEP] [--no-plot] [--no-video]
+    python -m src.run_vo_database_salah [--step STEP] [--no-plot] [--no-video]
 """
 
 import argparse
@@ -27,7 +27,7 @@ def load_K(calib: dict) -> np.ndarray:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Phone Data Pose Estimation Pipeline")
+    parser = argparse.ArgumentParser(description="Salah Qadah Dataset Pose Estimation Pipeline")
     parser.add_argument('--step', type=int, default=5, help='Frame step interval (default: 5)')
     parser.add_argument('--no-plot', action='store_true', help='Skip plot generation')
     parser.add_argument('--no-video', action='store_true', help='Skip video generation')
@@ -36,7 +36,7 @@ def main():
     args = parser.parse_args()
 
     K = load_K(np.load("evaluation-runs/vo_dataset_salah/data/calibration.npz"))
-    # Initialize pipeline with phone data configuration
+    # Initialize pipeline with Salah Qadah dataset configuration
     pipeline = PoseEstimationPipeline(
         data_dir="evaluation-runs/vo_dataset_salah/data",
         gt_filename="camera_poses_zyx.txt",
@@ -45,7 +45,7 @@ def main():
         feature_method="ORB",
         norm_type="Hamming",
         max_matches=500,
-        euler_convention="zyx"  # Phone uses ZYX convention
+        euler_convention="zyx"  # Dataset uses ZYX convention
     )
 
     pipeline.setup()
@@ -57,7 +57,7 @@ def main():
         video_fps=args.video_fps
     )
 
-    print("\n[INFO] Pipeline completed. Results saved to evaluation-runs/phone-data/results/")
+    print("\n[INFO] Pipeline completed. Results saved to evaluation-runs/vo_dataset_salah/results/")
     return results
 
 
