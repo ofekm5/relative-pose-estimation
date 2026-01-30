@@ -107,6 +107,8 @@ python -m src.run_single_pair -c evaluation-runs/phone-data/data/calibration_sca
 
 ### **Docker Usage**
 
+**Note:** For proper output handling, Docker commands should be run from WSL (Windows Subsystem for Linux), Linux, or macOS. Git Bash on Windows may not display container output correctly.
+
 ```bash
 # Build Docker image
 docker build -t pose-estimator:latest .
