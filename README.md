@@ -13,100 +13,6 @@ This pipeline requires **no dataset** and **no learning**, and works entirely wi
 
 ---
 
-## Simulator Mapping (Linux 2024 Support)
-
-We used the **rbdlabhaifa** simulator to build **ground truth (GT)**.
-
-
-### Original Repository
-https://github.com/rbdlabhaifa/simulatorMapping
-
-### Linux 2024 Support (Updated Version)
-We modified the simulator to also support **Linux (2024)**.
-
-Updated version:
-https://github.com/orki360/simulatorMapping
-
-
-## 📦 Project Structure
-
-```
-relative-pose-estimation/
-├── src/
-│   ├── pipeline.py              # Main orchestrator
-│   ├── run_phone_data.py        # Phone data runner
-│   ├── run_simulator_data.py    # Simulator data runner
-│   ├── run_vo_database_salah.py # Salah Qadah dataset runner
-│   ├── run_single_pair.py       # Single pair estimator
-│   ├── core/                    # High-level components
-│   │   ├── camera_calibration.py
-│   │   ├── ground_truth_loader.py
-│   │   ├── pose_estimator.py
-│   │   ├── batch_processor.py
-│   │   ├── pose_evaluator.py
-│   │   └── visualizer.py
-│   └── utils/                   # Helper functions
-│       ├── image_loader.py
-│       └── geometry.py
-├── evaluation-runs/             # Evaluation datasets
-│   ├── phone-data/
-│   │   ├── data/                # Images, ground truth, calibration
-│   │   └── results/             # Output files
-│   ├── vo_dataset_salah/
-│   │   ├── data/                # Images, ground truth, calibration
-│   │   └── results/             # Output files
-│   ├── simulator-data/
-│   │   ├── data/                # Images, ground truth
-│   │   └── results/             # Output files
-│   └── single-pair/
-│       └── images/              # Two test images
-├── Dockerfile
-└── README.md
-```
-
----
-
-## 🧠 Method Overview
-
-The 6-DoF relative motion is computed using the following pipeline:
-
-```
-ORB → Feature Matching → Essential Matrix → RecoverPose → 6-DoF Output
-```
-
-### **1. ORB Feature Extraction**
-
-Detect repeatable keypoints and compute compact binary descriptors that uniquely represent local visual patterns.
-
-### **2. Feature Matching**
-
-Match descriptors between the two images using:
-
-* **BFMatcher (Hamming distance)** or
-* **FLANN (LSH)**
-
-This produces corresponding pixel pairs:
-
-```
-p1 ↔ p2, p1' ↔ p2', ...
-```
-
-### **3. Essential Matrix Estimation**
-
-Use the matched 2D points and the camera intrinsic matrix to compute the **Essential Matrix**, which encodes the 3D geometry between the two views.
-
-### **4. Recover Relative Pose**
-
-Decompose the Essential Matrix into:
-
-* A **rotation matrix R (3×3)**
-* A **translation vector T (3×1)** (up to scale)
-
-Convert rotation to Euler angles (Roll, Pitch, Yaw).
-Return all six parameters as the relative motion between the images.
-
----
-
 ## 🛠 Quick Start
 
 ### **Prerequisites**
@@ -238,6 +144,61 @@ Results are saved to `evaluation-runs/{dataset}/results/`:
 - `evaluation_results.csv` - Error metrics
 
 ---
+
+## Simulator Mapping (Linux 2024 Support)
+
+We used the **rbdlabhaifa** simulator to build **ground truth (GT)**.
+
+
+### Original Repository
+https://github.com/rbdlabhaifa/simulatorMapping
+
+### Linux 2024 Support (Updated Version)
+We modified the simulator to also support **Linux (2024)**.
+
+Updated version:
+https://github.com/orki360/simulatorMapping
+
+
+
+## 🧠 Method Overview
+
+The 6-DoF relative motion is computed using the following pipeline:
+
+```
+ORB → Feature Matching → Essential Matrix → RecoverPose → 6-DoF Output
+```
+
+### **1. ORB Feature Extraction**
+
+Detect repeatable keypoints and compute compact binary descriptors that uniquely represent local visual patterns.
+
+### **2. Feature Matching**
+
+Match descriptors between the two images using:
+
+* **BFMatcher (Hamming distance)** or
+* **FLANN (LSH)**
+
+This produces corresponding pixel pairs:
+
+```
+p1 ↔ p2, p1' ↔ p2', ...
+```
+
+### **3. Essential Matrix Estimation**
+
+Use the matched 2D points and the camera intrinsic matrix to compute the **Essential Matrix**, which encodes the 3D geometry between the two views.
+
+### **4. Recover Relative Pose**
+
+Decompose the Essential Matrix into:
+
+* A **rotation matrix R (3×3)**
+* A **translation vector T (3×1)** (up to scale)
+
+Convert rotation to Euler angles (Roll, Pitch, Yaw).
+Return all six parameters as the relative motion between the images.
 
 ## 📷 Camera Calibration (Phone Data)
 
